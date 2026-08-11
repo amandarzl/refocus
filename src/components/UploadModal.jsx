@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { compressImage } from "../utils/imageProcessor";
 
 const MAX_IMAGES = 3;
 
@@ -22,7 +23,38 @@ export default function UploadModal({
     setTimeout(() => setIsShaking(false), 500);
   };
 
-  const handleFiles = (files) => {
+  // Compress image using worker (off-thread) with main-thread fallback
+  const compressAndResizeImage = async (file) => {
+    // Determine if we should extract palette (Color category)
+    const isColorCategory = group.subtitle === "Color";
+
+    const result = await compressImage(file, {
+      extractPalette: isColorCategory,
+      preferWorker: true,
+    });
+
+    if (!result.success) {
+      throw new Error(result.error || "Compression failed");
+    }
+
+    // Create blob URL for display (lifecycle managed by App.jsx)
+    const blobUrl = URL.createObjectURL(result.blob);
+
+    // Return object with src, width, height, and optional palette
+    const imageData = {
+      src: blobUrl,
+      width: result.width,
+      height: result.height,
+    };
+
+    if (result.palette && result.palette.length > 0) {
+      imageData.palette = result.palette;
+    }
+
+    return imageData;
+  };
+
+  const handleFiles = async (files) => {
     const imageFiles = Array.from(files).filter((file) =>
       file.type.startsWith("image/"),
     );
@@ -34,12 +66,14 @@ export default function UploadModal({
       return;
     }
 
-    const newImages = imageFiles.map((file) => URL.createObjectURL(file));
+    const newImages = await Promise.all(
+      imageFiles.map((file) => compressAndResizeImage(file)),
+    );
     onAddImages(group.id, newImages);
     onClose();
   };
 
-  const handlePaste = (e) => {
+  const handlePaste = async (e) => {
     const items = e.clipboardData?.items;
     if (!items) return;
 
@@ -55,7 +89,9 @@ export default function UploadModal({
       return;
     }
 
-    const newImages = imageFiles.map((file) => URL.createObjectURL(file));
+    const newImages = await Promise.all(
+      imageFiles.map((file) => compressAndResizeImage(file)),
+    );
     onAddImages(group.id, newImages);
     onClose();
   };

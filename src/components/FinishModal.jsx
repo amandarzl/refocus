@@ -1,21 +1,45 @@
 import { useRef, useState } from "react";
+import { compressImage, revokeObjectUrl } from "../utils/imageProcessor";
 
-export default function FinishModal({ isDark, goal, onClose, onSave }) {
+export default function FinishModal({
+  isDark,
+  goal,
+  session,
+  onClose,
+  onSave,
+}) {
   const [image, setImage] = useState(null);
+  const [palette, setPalette] = useState([]);
   const [notes, setNotes] = useState("");
   const fileInputRef = useRef(null);
 
-  const handleFileChange = (e) => {
+  const handleFileChange = async (e) => {
     const file = e.target.files?.[0];
     if (!file || !file.type.startsWith("image/")) return;
-    setImage(URL.createObjectURL(file));
+
+    const result = await compressImage(file, {
+      extractPalette: true, // Always extract palette for drawing snapshots
+      preferWorker: true,
+    });
+
+    if (!result.success) {
+      console.error("Compression failed:", result.error);
+      return;
+    }
+
+    const blobUrl = URL.createObjectURL(result.blob);
+    setImage(blobUrl);
+    if (result.palette && result.palette.length > 0) {
+      setPalette(result.palette);
+    }
   };
 
-  const handleSave = () => {
-    const session = {
-      id: Date.now(),
+  const handleSave = async () => {
+    const sessionData = {
+      id: session?.id || Date.now(),
       goal,
       image,
+      palette,
       notes,
       date: new Date().toLocaleDateString(undefined, {
         year: "numeric",
@@ -23,7 +47,13 @@ export default function FinishModal({ isDark, goal, onClose, onSave }) {
         day: "numeric",
       }),
     };
-    onSave(session);
+    await onSave(sessionData);
+    // Revoke blob URL after parent has converted it to base64
+    if (image && image.startsWith("blob:")) {
+      revokeObjectUrl(image);
+    }
+    setImage(null);
+    setPalette([]);
   };
 
   return (
@@ -105,7 +135,9 @@ export default function FinishModal({ isDark, goal, onClose, onSave }) {
                 />
                 <button
                   onClick={() => {
+                    if (image) revokeObjectUrl(image);
                     setImage(null);
+                    setPalette([]);
                     if (fileInputRef.current) fileInputRef.current.value = "";
                   }}
                   className="absolute top-2 right-2 rounded-lg bg-black/60 p-1.5 text-white backdrop-blur-sm transition-colors hover:bg-black/80"

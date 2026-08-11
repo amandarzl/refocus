@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef } from "react";
+import { useLiveQuery } from "dexie-react-hooks";
+import { db } from "../db.js";
 
 export default function Header({
   viewMode,
@@ -16,14 +18,17 @@ export default function Header({
   const [tempTitle, setTempTitle] = useState(canvasTitle);
 
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const [userName, setUserName] = useState(
-    () => localStorage.getItem("refocus_username") || "User",
-  );
+  const userNameSetting = useLiveQuery(() => db.settings.get("username"), []);
+  const [userName, setUserName] = useState(userNameSetting?.value || "User");
   const dropdownRef = useRef(null);
 
   useEffect(() => {
     setTempTitle(canvasTitle);
   }, [canvasTitle]);
+
+  useEffect(() => {
+    setUserName(userNameSetting?.value || "User");
+  }, [userNameSetting]);
 
   const handleSave = () => {
     const finalTitle = tempTitle.trim() || "Untitled Canvas";
@@ -32,7 +37,7 @@ export default function Header({
   };
 
   useEffect(() => {
-    localStorage.setItem("refocus_username", userName);
+    db.settings.put({ key: "username", value: userName });
   }, [userName]);
 
   useEffect(() => {
@@ -45,13 +50,15 @@ export default function Header({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const handleExportVault = () => {
-    const sessions = localStorage.getItem("refocus_sessions");
-    if (!sessions) {
+  const handleExportVault = async () => {
+    const sessions = await db.sessions.toArray();
+    if (!sessions || sessions.length === 0) {
       alert("No vault data found to export.");
       return;
     }
-    const blob = new Blob([sessions], { type: "application/json" });
+    const blob = new Blob([JSON.stringify(sessions)], {
+      type: "application/json",
+    });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;

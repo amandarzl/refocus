@@ -12,13 +12,14 @@ export default function ReferenceImage({
   onSelect,
   onUpdate,
   onRemove,
+  isCropMode,
+  cropRect,
+  onCropChange,
+  onApplyCrop,
+  onCancelCrop,
 }) {
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState(null);
-  const [isCropMode, setIsCropMode] = useState(false);
-  const [cropRect, setCropRect] = useState(null); // { left, top, right, bottom } normalized
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [isExporting, setIsExporting] = useState(false);
   const imgRef = useRef(null);
   const containerRef = useRef(null);
   const cropDragRef = useRef(null);
@@ -36,14 +37,6 @@ export default function ReferenceImage({
   // Zoom-compensated grab margin so the hit area stays a comfortable
   // constant size on screen regardless of the board zoom level
   const hitPad = HIT_MARGIN / zoom;
-
-  // Reset crop mode when deselected
-  useEffect(() => {
-    if (!isSelected) {
-      setIsCropMode(false);
-      setIsMenuOpen(false);
-    }
-  }, [isSelected]);
 
   // --- Drag logic ---
   const handlePointerDown = (e) => {
@@ -116,16 +109,11 @@ export default function ReferenceImage({
     resizeRef.current = null;
   };
 
-  // --- Crop logic ---
-  const startCrop = () => {
-    setIsCropMode(true);
-    setIsMenuOpen(false);
-    setCropRect(crop ?? { left: 0.1, top: 0.1, right: 0.9, bottom: 0.9 });
-  };
-
+  // --- Crop logic (local drag handling, state synced via onCropChange) ---
   const handleCropPointerDown = (e, handle) => {
     e.stopPropagation();
-    const rect = imgRef.current.getBoundingClientRect();
+    const rect = imgRef.current?.getBoundingClientRect();
+    if (!rect) return;
     cropDragRef.current = {
       handle,
       startX: e.clientX,
@@ -163,120 +151,11 @@ export default function ReferenceImage({
       if (drag.handle.includes("bottom"))
         next.bottom = Math.min(1, Math.max(init.top + min, init.bottom + dy));
     }
-    setCropRect(next);
+    onCropChange(next);
   };
 
   const handleCropPointerUp = () => {
     cropDragRef.current = null;
-  };
-
-  const applyCrop = () => {
-    onUpdate(image.id, { crop: cropRect });
-    setIsCropMode(false);
-  };
-
-  const cancelCrop = () => {
-    setCropRect(crop ?? null);
-    setIsCropMode(false);
-  };
-
-  // --- Transform helpers ---
-  const toggleMirror = () => {
-    onUpdate(image.id, { mirrored: !mirrored });
-    setIsMenuOpen(false);
-  };
-
-  const toggleGray = () => {
-    onUpdate(image.id, { grayscale: !grayscale });
-    setIsMenuOpen(false);
-  };
-
-  const rotate = () => {
-    onUpdate(image.id, { rotation: (rotation + 90) % 360 });
-    setIsMenuOpen(false);
-  };
-
-  const revert = () => {
-    onUpdate(image.id, {
-      rotation: 0,
-      mirrored: false,
-      grayscale: false,
-      crop: null,
-    });
-    setIsMenuOpen(false);
-  };
-
-  // --- Copy ---
-  const copyImage = async () => {
-    setIsMenuOpen(false);
-    try {
-      const blob = await fetch(image.src).then((r) => r.blob());
-      await navigator.clipboard.write([
-        new ClipboardItem({ [blob.type || "image/png"]: blob }),
-      ]);
-    } catch {
-      // Fallback: copy the URL text
-      try {
-        await navigator.clipboard.writeText(image.src);
-      } catch {
-        /* ignore */
-      }
-    }
-  };
-
-  // --- Export ---
-  const exportImage = async () => {
-    setIsMenuOpen(false);
-    setIsExporting(true);
-    try {
-      const img = new Image();
-      img.crossOrigin = "anonymous";
-      img.src = image.src;
-      await new Promise((resolve, reject) => {
-        img.onload = resolve;
-        img.onerror = reject;
-      });
-
-      const c = crop ?? { left: 0, top: 0, right: 1, bottom: 1 };
-      const srcW = img.naturalWidth;
-      const srcH = img.naturalHeight;
-      const sx = c.left * srcW;
-      const sy = c.top * srcH;
-      const sw = (c.right - c.left) * srcW;
-      const sh = (c.bottom - c.top) * srcH;
-
-      const rotated = rotation % 180 !== 0;
-      const outW = rotated ? sh : sw;
-      const outH = rotated ? sw : sh;
-
-      const canvas = document.createElement("canvas");
-      canvas.width = outW;
-      canvas.height = outH;
-      const ctx = canvas.getContext("2d");
-
-      ctx.translate(outW / 2, outH / 2);
-      ctx.rotate((rotation * Math.PI) / 180);
-      if (mirrored) ctx.scale(-1, 1);
-      ctx.drawImage(img, sx, sy, sw, sh, -sw / 2, -sh / 2, sw, sh);
-      if (grayscale) {
-        ctx.globalCompositeOperation = "saturation";
-        ctx.fillStyle = "#000";
-        ctx.fillRect(-outW / 2, -outH / 2, outW, outH);
-      }
-
-      const a = document.createElement("a");
-      a.href = canvas.toDataURL("image/png");
-      a.download = `reference-${image.id}.png`;
-      a.click();
-    } catch {
-      // Cross-origin taint fallback: download original
-      const a = document.createElement("a");
-      a.href = image.src;
-      a.download = `reference-${image.id}.png`;
-      a.click();
-    } finally {
-      setIsExporting(false);
-    }
   };
 
   // --- Style computation ---
@@ -289,12 +168,6 @@ export default function ReferenceImage({
   const filterStyle = grayscale ? "grayscale(1)" : "none";
 
   const transformStyle = `rotate(${rotation}deg) scaleX(${mirrored ? -1 : 1})`;
-
-  const toolbarBtn =
-    "flex h-8 w-8 items-center justify-center rounded-lg transition-colors " +
-    (isDark
-      ? "text-slate-300 hover:bg-zinc-700"
-      : "text-slate-600 hover:bg-slate-200");
 
   return (
     <div
@@ -315,201 +188,6 @@ export default function ReferenceImage({
     >
       {/* Inner content wrapper — keeps the image visually at x,y */}
       <div className="relative" style={{ width }}>
-        {/* Toolbar (selected) */}
-        {isSelected && !isCropMode && (
-          <div
-            className={`absolute -top-14 left-1/2 z-40 flex -translate-x-1/2 items-center gap-1 rounded-xl border px-2 py-1 shadow-2xl ${
-              isDark
-                ? "border-zinc-700 bg-[#242428]"
-                : "border-slate-200 bg-white"
-            }`}
-            onPointerDown={(e) => e.stopPropagation()}
-          >
-            <button className={toolbarBtn} title="Crop" onClick={startCrop}>
-              <svg
-                className="h-4 w-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M6 2v14a2 2 0 002 2h14M2 6h14a2 2 0 012 2v14"
-                />
-              </svg>
-            </button>
-            <button
-              className={toolbarBtn}
-              title="Mirror"
-              onClick={toggleMirror}
-            >
-              <svg
-                className="h-4 w-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M8 3v18M16 3v18M3 8h18M3 16h18"
-                />
-              </svg>
-            </button>
-            <button
-              className={toolbarBtn}
-              title={grayscale ? "Ungray" : "Gray"}
-              onClick={toggleGray}
-            >
-              <svg
-                className="h-4 w-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <circle cx="12" cy="12" r="9" />
-                <path strokeLinecap="round" d="M12 3a9 9 0 010 18" />
-              </svg>
-            </button>
-            <button className={toolbarBtn} title="Rotate" onClick={rotate}>
-              <svg
-                className="h-4 w-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M4 4v5h5M20 20v-5h-5M4 9a8 8 0 0114-3M20 15a8 8 0 01-14 3"
-                />
-              </svg>
-            </button>
-            <button className={toolbarBtn} title="Revert" onClick={revert}>
-              <svg
-                className="h-4 w-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M3 10h10a5 5 0 015 5v0a5 5 0 01-5 5H8M3 10l4-4M3 10l4 4"
-                />
-              </svg>
-            </button>
-
-            {/* ⋯ menu */}
-            <div className="relative">
-              <button
-                className={toolbarBtn}
-                title="More options"
-                onClick={() => setIsMenuOpen((v) => !v)}
-              >
-                <svg
-                  className="h-4 w-4"
-                  fill="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <circle cx="5" cy="12" r="1.5" />
-                  <circle cx="12" cy="12" r="1.5" />
-                  <circle cx="19" cy="12" r="1.5" />
-                </svg>
-              </button>
-              {isMenuOpen && (
-                <div
-                  className={`absolute right-0 top-9 z-50 w-40 overflow-hidden rounded-xl border shadow-2xl ${
-                    isDark
-                      ? "border-zinc-700 bg-[#242428]"
-                      : "border-slate-200 bg-white"
-                  }`}
-                >
-                  <button
-                    onClick={() => {
-                      setIsMenuOpen(false);
-                      onRemove(image.id);
-                    }}
-                    className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors ${
-                      isDark
-                        ? "text-slate-200 hover:bg-zinc-800"
-                        : "text-slate-700 hover:bg-slate-100"
-                    }`}
-                  >
-                    <svg
-                      className="h-4 w-4 text-[#E5989B]"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth={2}
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                      />
-                    </svg>
-                    Delete
-                  </button>
-                  <button
-                    onClick={copyImage}
-                    className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors ${
-                      isDark
-                        ? "text-slate-200 hover:bg-zinc-800"
-                        : "text-slate-700 hover:bg-slate-100"
-                    }`}
-                  >
-                    <svg
-                      className="h-4 w-4"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth={2}
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-                      />
-                    </svg>
-                    Copy
-                  </button>
-                  <button
-                    onClick={exportImage}
-                    disabled={isExporting}
-                    className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors ${
-                      isDark
-                        ? "text-slate-200 hover:bg-zinc-800"
-                        : "text-slate-700 hover:bg-slate-100"
-                    } ${isExporting ? "opacity-50" : ""}`}
-                  >
-                    <svg
-                      className="h-4 w-4"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth={2}
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"
-                      />
-                    </svg>
-                    {isExporting ? "Exporting…" : "Export"}
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
         {/* Image */}
         <div
           className={`relative overflow-hidden rounded-lg shadow-lg transition-shadow ${
@@ -606,35 +284,6 @@ export default function ReferenceImage({
                 d="M13 5l6 6-6 6M5 13l6 6 6-6"
               />
             </svg>
-          </div>
-        )}
-
-        {/* Crop action bar */}
-        {isCropMode && (
-          <div
-            className="absolute -bottom-12 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 rounded-xl border px-3 py-1.5 shadow-2xl"
-            style={{
-              background: isDark ? "#242428" : "#fff",
-              borderColor: isDark ? "#3f3f46" : "#e2e8f0",
-            }}
-            onPointerDown={(e) => e.stopPropagation()}
-          >
-            <button
-              onClick={applyCrop}
-              className="rounded-lg bg-[#A8C3A4] px-3 py-1 text-xs font-bold text-black transition-colors hover:bg-[#97b593]"
-            >
-              Apply
-            </button>
-            <button
-              onClick={cancelCrop}
-              className={`rounded-lg px-3 py-1 text-xs font-semibold transition-colors ${
-                isDark
-                  ? "text-slate-300 hover:bg-zinc-700"
-                  : "text-slate-600 hover:bg-slate-200"
-              }`}
-            >
-              Cancel
-            </button>
           </div>
         )}
       </div>

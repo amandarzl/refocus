@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useLiveQuery } from "dexie-react-hooks";
 import Header from "./components/Header.jsx";
 import TemplateModal from "./components/TemplateModal.jsx";
 import FinishModal from "./components/FinishModal.jsx";
 import CategoryPopover from "./components/CategoryPopover.jsx";
 import UploadModal from "./components/UploadModal.jsx";
 import ReferenceImage from "./components/ReferenceImage.jsx";
+import { db } from "./db.js";
+import { revokeObjectUrl } from "./utils/imageProcessor.js";
+import { exportAco } from "./utils/exportAco.js";
 
 const MAX_IMAGES = 3;
 
@@ -43,14 +47,10 @@ export default function App() {
   const [selectedGoal, setSelectedGoal] = useState("Cute & Cozy");
   const [canvasTitle, setCanvasTitle] = useState("Untitled Canvas");
   const [isFinishModalOpen, setIsFinishModalOpen] = useState(false);
-  const [savedSessions, setSavedSessions] = useState(() => {
-    try {
-      const stored = localStorage.getItem("refocus_sessions");
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
-  });
+  const savedSessions = useLiveQuery(
+    () => db.sessions.orderBy("id").reverse().toArray(),
+    [],
+  );
 
   // Reference box state shared between sidebar, category popover & upload modal
   const [referenceGroups, setReferenceGroups] = useState(() =>
@@ -66,14 +66,13 @@ export default function App() {
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const [isSpacePressed, setIsSpacePressed] = useState(false);
+  const [referenceToolMenuOpen, setReferenceToolMenuOpen] = useState(false);
+  const [isReferenceToolCropMode, setIsReferenceToolCropMode] = useState(false);
+  const [referenceCropRect, setReferenceCropRect] = useState(null);
   const canvasRef = useRef(null);
+  const cropDragRef = useRef(null);
 
   const isDark = theme === "dark";
-
-  // Persist saved sessions to localStorage
-  useEffect(() => {
-    localStorage.setItem("refocus_sessions", JSON.stringify(savedSessions));
-  }, [savedSessions]);
 
   // Measure canvas size when entering the workspace so images scatter correctly
   useEffect(() => {
@@ -86,6 +85,13 @@ export default function App() {
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
   }, [viewMode]);
+
+  // Close toolbar menu when image is deselected
+  useEffect(() => {
+    if (!selectedImageId) {
+      setReferenceToolMenuOpen(false);
+    }
+  }, [selectedImageId]);
 
   const clampZoom = (z) => Math.max(0.25, Math.min(3, z));
 
@@ -192,13 +198,22 @@ export default function App() {
   };
 
   const resetCanvasState = useCallback(() => {
+    // Revoke blob URLs before clearing state to prevent memory leaks
+    referenceGroups.forEach((g) => {
+      g.images.forEach((img) => {
+        if (img.src && img.src.startsWith("blob:")) {
+          revokeObjectUrl(img.src);
+        }
+      });
+    });
+
     setReferenceGroups(DEFAULT_GROUPS.map((g) => ({ ...g, images: [] })));
     setPan({ x: 0, y: 0 });
     setZoom(1);
     setSelectedImageId(null);
     setUploadTargetGroup(null);
     setIsCategoryPopoverOpen(false);
-  }, []);
+  }, [referenceGroups]);
 
   const handleSelectTemplate = (template) => {
     resetCanvasState();
@@ -215,52 +230,166 @@ export default function App() {
     setViewMode("workspace");
   };
 
-  const handleSaveToVault = (session) => {
+  // Convert blob URL to base64 for Dexie persistence
+  const blobUrlToBase64 = (blobUrl) => {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.onload = () => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(xhr.response);
+      };
+      xhr.onerror = reject;
+      xhr.open("GET", blobUrl);
+      xhr.responseType = "blob";
+      xhr.send();
+    });
+  };
+
+  const handleSaveToVault = async (session) => {
     // Capture current workspace state for re-entry
+    const sessionData = { ...session, canvasTitle };
+
+    // Convert blob URLs to base64 for Dexie persistence
+    if (sessionData.image && sessionData.image.startsWith("blob:")) {
+      sessionData.image = await blobUrlToBase64(sessionData.image);
+    }
+
+    // Convert reference group images from blob URLs to base64 so they persist across sessions
+    const base64ReferenceGroups = await Promise.all(
+      referenceGroups.map(async (g) => ({
+        ...g,
+        images: await Promise.all(
+          g.images.map(async (img) => {
+            if (img.src?.startsWith("blob:")) {
+              return { ...img, src: await blobUrlToBase64(img.src) };
+            }
+            return img;
+          }),
+        ),
+      })),
+    );
+
     const fullSession = {
-      ...session,
+      ...sessionData,
       canvasTitle,
       canvasState: {
-        referenceGroups,
+        referenceGroups: base64ReferenceGroups,
         pan,
         zoom,
       },
     };
-    setSavedSessions((prev) => [fullSession, ...prev]);
+
+    if (session.id) {
+      // Reopened session: update the existing vault record in place
+      const updatedSession = { ...fullSession, id: session.id };
+      await db.sessions.put(updatedSession);
+      setCurrentSession(updatedSession);
+    } else {
+      // Brand-new drawing: create a fresh Gallery Vault entry
+      const newId = await db.sessions.add(fullSession);
+      setCurrentSession({ ...fullSession, id: newId });
+    }
+
+    // Revoke all blob URLs after successful save
+    referenceGroups.forEach((g) => {
+      g.images.forEach((img) => {
+        if (img.src?.startsWith("blob:")) {
+          revokeObjectUrl(img.src);
+        }
+      });
+    });
+    if (session.image?.startsWith("blob:")) {
+      revokeObjectUrl(session.image);
+    }
+
     setIsFinishModalOpen(false);
     setCurrentSession(null);
     setViewMode("hub");
   };
 
-  const handleSaveAndExit = (sessionData) => {
+  const handleSaveAndExit = async (sessionData) => {
     // Extract all active photos from referenceGroups
     const allImages = referenceGroups.flatMap((g) => g.images);
 
     // Read the latest canvasTitle workspace state
     // Determine previewImage: use existing previewImage or fallback to first image src
-    const previewImage = sessionData.previewImage || allImages[0]?.src || null;
+    let previewImage = sessionData?.previewImage || allImages[0]?.src || null;
 
-    const updatedSession = {
-      ...sessionData,
+    // Convert blob URLs to base64 for persistence
+    if (previewImage && previewImage.startsWith("blob:")) {
+      previewImage = await blobUrlToBase64(previewImage);
+    }
+
+    // Convert reference group images from blob URLs to base64 so they persist across sessions
+    const base64ReferenceGroups = await Promise.all(
+      referenceGroups.map(async (g) => ({
+        ...g,
+        images: await Promise.all(
+          g.images.map(async (img) => {
+            if (img.src?.startsWith("blob:")) {
+              return { ...img, src: await blobUrlToBase64(img.src) };
+            }
+            return img;
+          }),
+        ),
+      })),
+    );
+
+    const sessionPayload = {
+      ...(sessionData || {}),
       canvasTitle,
       previewImage,
       canvasState: {
-        referenceGroups,
+        referenceGroups: base64ReferenceGroups,
         pan,
         zoom,
       },
     };
 
-    // Update savedSessions by matching session ID
-    setSavedSessions((prev) =>
-      prev.map((s) => (s.id === sessionData.id ? updatedSession : s)),
-    );
-    setCurrentSession(null);
+    if (sessionData?.id) {
+      // Re-opened session: update the existing vault record in place
+      const updatedSession = { ...sessionPayload, id: sessionData.id };
+      await db.sessions.put(updatedSession);
+      setCurrentSession(updatedSession);
+    } else {
+      // Brand-new drawing: create a fresh Gallery Vault entry
+      const newId = await db.sessions.add({
+        ...sessionPayload,
+        goal: selectedGoal,
+        date: new Date().toLocaleDateString(undefined, {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+        }),
+      });
+      setCurrentSession({ ...sessionPayload, id: newId });
+    }
+
+    // Revoke all blob URLs after successful save
+    referenceGroups.forEach((g) => {
+      g.images.forEach((img) => {
+        if (img.src?.startsWith("blob:")) {
+          revokeObjectUrl(img.src);
+        }
+      });
+    });
+
     setViewMode("hub");
     resetCanvasState();
   };
 
   const handleOpenSession = (session) => {
+    // Revoke old blob URLs before switching sessions
+    referenceGroups.forEach((g) => {
+      g.images.forEach((img) => {
+        if (img.src?.startsWith("blob:")) {
+          revokeObjectUrl(img.src);
+        }
+      });
+    });
+
     setCurrentSession(session);
     if (session.canvasState) {
       setReferenceGroups(session.canvasState.referenceGroups);
@@ -279,6 +408,7 @@ export default function App() {
   };
 
   const handleSelectAll = () => {
+    if (!savedSessions) return;
     if (selectedSessionIds.length === savedSessions.length) {
       setSelectedSessionIds([]);
     } else {
@@ -286,19 +416,20 @@ export default function App() {
     }
   };
 
-  const handleDeleteSelected = () => {
-    setSavedSessions((prev) =>
-      prev.filter((s) => !selectedSessionIds.includes(s.id)),
-    );
+  const handleDeleteSelected = async () => {
+    if (!selectedSessionIds.length) return;
+    await db.sessions.bulkDelete(selectedSessionIds);
     setSelectedSessionIds([]);
   };
 
-  const handleUpdateSession = (id, field, value) => {
-    setSavedSessions((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, [field]: value } : s)),
-    );
-    if (previewSession && previewSession.id === id) {
-      setPreviewSession((prev) => ({ ...prev, [field]: value }));
+  const handleUpdateSession = async (id, field, value) => {
+    const session = await db.sessions.get(id);
+    if (session) {
+      const updated = { ...session, [field]: value };
+      await db.sessions.put(updated);
+      if (previewSession && previewSession.id === id) {
+        setPreviewSession(updated);
+      }
     }
   };
 
@@ -322,17 +453,30 @@ export default function App() {
         if (g.id !== groupId) return g;
         const existing = g.images;
         const room = MAX_IMAGES - existing.length;
-        const toAdd = newImages.slice(0, room).map((src) => ({
-          id: `${groupId}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-          src,
-          x: Math.random() * Math.max(0, canvasSize.width - 220),
-          y: Math.random() * Math.max(0, canvasSize.height - 220),
-          width: 220,
-          rotation: 0,
-          mirrored: false,
-          grayscale: false,
-          crop: null,
-        }));
+        const toAdd = newImages.slice(0, room).map((img) => {
+          // Set sensible default display size (max 260px width) while preserving
+          // the high-res original data in the blob for crisp zooming
+          const maxDisplayWidth = 260;
+          const originalWidth = img.width ?? 220;
+          const originalHeight = img.height ?? 220;
+          const aspectRatio = originalHeight / originalWidth;
+          const displayWidth = Math.min(originalWidth, maxDisplayWidth);
+          const displayHeight = displayWidth * aspectRatio;
+
+          return {
+            id: `${groupId}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            src: img.src,
+            width: displayWidth,
+            height: displayHeight,
+            palette: img.palette ?? [],
+            x: Math.random() * Math.max(0, canvasSize.width - displayWidth),
+            y: Math.random() * Math.max(0, canvasSize.height - displayHeight),
+            rotation: 0,
+            mirrored: false,
+            grayscale: false,
+            crop: null,
+          };
+        });
         return { ...g, images: [...existing, ...toAdd] };
       }),
     );
@@ -350,6 +494,14 @@ export default function App() {
   };
 
   const handleRemoveImage = (id) => {
+    // Revoke blob URL before removing from state
+    const imageToRemove = referenceGroups
+      .flatMap((g) => g.images)
+      .find((img) => img.id === id);
+    if (imageToRemove?.src?.startsWith("blob:")) {
+      revokeObjectUrl(imageToRemove.src);
+    }
+
     setReferenceGroups((prev) =>
       prev.map((g) => ({
         ...g,
@@ -393,6 +545,165 @@ export default function App() {
         backgroundSize: "24px 24px",
       };
 
+  // --- Reference Toolbar Handlers ---
+  const selectedImage = allImages.find((img) => img.id === selectedImageId);
+
+  const handleReferenceToolAction = (patch) => {
+    if (!selectedImageId) return;
+    handleUpdateImage(selectedImageId, patch);
+  };
+
+  const handleReferenceToggleMirror = () => {
+    if (!selectedImage) return;
+    handleReferenceToolAction({ mirrored: !selectedImage.mirrored });
+    setReferenceToolMenuOpen(false);
+  };
+
+  const handleReferenceToggleGray = () => {
+    if (!selectedImage) return;
+    handleReferenceToolAction({ grayscale: !selectedImage.grayscale });
+    setReferenceToolMenuOpen(false);
+  };
+
+  const handleReferenceRotate = () => {
+    if (!selectedImage) return;
+    handleReferenceToolAction({
+      rotation: ((selectedImage.rotation || 0) + 90) % 360,
+    });
+    setReferenceToolMenuOpen(false);
+  };
+
+  const handleReferenceRevert = () => {
+    if (!selectedImage) return;
+    handleReferenceToolAction({
+      rotation: 0,
+      mirrored: false,
+      grayscale: false,
+      crop: null,
+    });
+    setReferenceToolMenuOpen(false);
+    setReferenceCropRect(null);
+  };
+
+  const handleReferenceStartCrop = () => {
+    if (!selectedImage) return;
+    setIsReferenceToolCropMode(true);
+    setReferenceToolMenuOpen(false);
+    setReferenceCropRect(
+      selectedImage.crop ?? { left: 0.1, top: 0.1, right: 0.9, bottom: 0.9 },
+    );
+  };
+
+  const applyReferenceCrop = () => {
+    if (!selectedImageId || !referenceCropRect) return;
+    handleUpdateImage(selectedImageId, { crop: referenceCropRect });
+    setIsReferenceToolCropMode(false);
+  };
+
+  const cancelReferenceCrop = () => {
+    setReferenceCropRect(null);
+    setIsReferenceToolCropMode(false);
+  };
+
+  const handleReferenceCropPointerDown = (e, handle) => {
+    e.stopPropagation();
+    const img = selectedImage;
+    if (!img) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    cropDragRef.current = {
+      handle,
+      startX: e.clientX,
+      startY: e.clientY,
+      rect,
+      initial: { ...referenceCropRect },
+    };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+
+  const handleReferenceCropPointerMove = (e) => {
+    const drag = cropDragRef.current;
+    if (!drag) return;
+    const dx = (e.clientX - drag.startX) / drag.rect.width;
+    const dy = (e.clientY - drag.startY) / drag.rect.height;
+    const init = drag.initial;
+
+    let next = { ...init };
+    const min = 0.05;
+
+    if (drag.handle === "move") {
+      const w = init.right - init.left;
+      const h = init.bottom - init.top;
+      next.left = Math.max(0, Math.min(1 - w, init.left + dx));
+      next.top = Math.max(0, Math.min(1 - h, init.top + dy));
+      next.right = next.left + w;
+      next.bottom = next.top + h;
+    } else {
+      if (drag.handle.includes("left"))
+        next.left = Math.max(0, Math.min(init.right - min, init.left + dx));
+      if (drag.handle.includes("right"))
+        next.right = Math.min(1, Math.max(init.left + min, init.right + dx));
+      if (drag.handle.includes("top"))
+        next.top = Math.max(0, Math.min(init.bottom - min, init.top + dy));
+      if (drag.handle.includes("bottom"))
+        next.bottom = Math.min(1, Math.max(init.top + min, init.bottom + dy));
+    }
+    setReferenceCropRect(next);
+  };
+
+  const handleReferenceCropPointerUp = () => {
+    cropDragRef.current = null;
+  };
+
+  const copyReferenceImage = async () => {
+    if (!selectedImage) return;
+    setReferenceToolMenuOpen(false);
+    try {
+      // Try modern Clipboard API first
+      const response = await fetch(selectedImage.src);
+      const blob = await response.blob();
+
+      try {
+        const item = new ClipboardItem({ [blob.type]: blob });
+        await navigator.clipboard.write([item]);
+        showToast("Copied!");
+      } catch {
+        // Fallback: copy the image URL/link
+        await navigator.clipboard.writeText(selectedImage.src);
+        showToast("Link copied!");
+      }
+    } catch (error) {
+      console.error("Failed to copy image:", error);
+      showToast("Failed to copy");
+    }
+  };
+
+  const exportReferenceImage = async () => {
+    if (!selectedImage) return;
+    setReferenceToolMenuOpen(false);
+    const img = selectedImage;
+    const exportDataUrl = img.src;
+    const a = document.createElement("a");
+    a.href = exportDataUrl;
+    a.download = `reference-${img.id}.png`;
+    a.click();
+  };
+
+  const exportReferencePalette = () => {
+    if (!selectedImage || !selectedImage.palette) return;
+    setReferenceToolMenuOpen(false);
+    try {
+      exportAco(selectedImage.palette, `palette-${selectedImage.id}.aco`);
+    } catch {
+      // Silent fail - no popup
+    }
+  };
+
+  const toolbarBtn =
+    "flex h-8 w-8 items-center justify-center rounded-lg transition-colors " +
+    (isDark
+      ? "text-slate-300 hover:bg-zinc-700"
+      : "text-slate-600 hover:bg-slate-200");
+
   return (
     <div
       data-theme={theme}
@@ -408,11 +719,7 @@ export default function App() {
         onToggleTheme={toggleTheme}
         onLogoClick={() => setViewMode("hub")}
         onStartDrawing={openTemplateModal}
-        onSaveExit={
-          currentSession
-            ? () => handleSaveAndExit(currentSession)
-            : () => setViewMode("hub")
-        }
+        onSaveExit={() => handleSaveAndExit(currentSession)}
         onFinishDrawing={() => setIsFinishModalOpen(true)}
       />
 
@@ -459,10 +766,10 @@ export default function App() {
           >
             <div className="mb-4 flex items-center gap-3">
               <h2 className="text-sm font-bold uppercase tracking-widest">
-                Your Gallery Vault ({savedSessions.length})
+                Your Gallery Vault ({savedSessions?.length || 0})
               </h2>
               <div className="h-px flex-1 bg-zinc-700/40" />
-              {savedSessions.length > 0 && (
+              {savedSessions?.length > 0 && (
                 <div className="flex items-center gap-2">
                   <button
                     onClick={handleSelectAll}
@@ -488,7 +795,7 @@ export default function App() {
               )}
             </div>
 
-            {savedSessions.length === 0 ? (
+            {!savedSessions?.length ? (
               <div
                 className={`flex flex-col items-center justify-center rounded-2xl border-2 border-dashed p-16 text-center ${
                   isDark
@@ -516,12 +823,13 @@ export default function App() {
                     isDark ? "text-slate-400" : "text-slate-500"
                   }`}
                 >
-                  No saved sessions yet. Finish a drawing to build your vault.
+                  No saved sessions yet. Finish a drawing or save & exit to
+                  build your vault.
                 </p>
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                {savedSessions.map((session) => {
+                {savedSessions?.map((session) => {
                   const isSelected = selectedSessionIds.includes(session.id);
                   return (
                     <div
@@ -650,15 +958,6 @@ export default function App() {
             {allImages.length === 0 && (
               <div className="relative z-10 flex h-full flex-col items-center justify-center px-8">
                 <div className="text-center">
-                  <span
-                    className={`inline-block rounded-full px-4 py-1.5 text-xs font-bold uppercase tracking-widest ${
-                      isDark
-                        ? "bg-[#252529] text-slate-300"
-                        : "bg-white text-slate-600 shadow-sm"
-                    }`}
-                  >
-                    Drawing Goal: {selectedGoal}
-                  </span>
                   <h2
                     className={`mt-6 text-2xl font-bold ${
                       isDark ? "text-slate-300" : "text-slate-500"
@@ -697,6 +996,15 @@ export default function App() {
                   onSelect={() => setSelectedImageId(img.id)}
                   onUpdate={handleUpdateImage}
                   onRemove={handleRemoveImage}
+                  isCropMode={
+                    isReferenceToolCropMode && selectedImageId === img.id
+                  }
+                  cropRect={
+                    selectedImageId === img.id ? referenceCropRect : null
+                  }
+                  onCropChange={handleReferenceCropPointerMove}
+                  onApplyCrop={applyReferenceCrop}
+                  onCancelCrop={cancelReferenceCrop}
                 />
               ))}
             </div>
@@ -744,6 +1052,267 @@ export default function App() {
                 +
               </button>
             </div>
+
+            {/* Reference Image Toolbar (bottom-center, only when image selected) */}
+            {selectedImageId && !isReferenceToolCropMode && (
+              <div
+                className={`absolute bottom-6 left-1/2 z-30 flex -translate-x-1/2 items-center gap-1 rounded-xl border px-2 py-1 shadow-2xl ${
+                  isDark
+                    ? "border-zinc-700 bg-[#242428]"
+                    : "border-slate-200 bg-white"
+                }`}
+                onPointerDown={(e) => e.stopPropagation()}
+              >
+                <button
+                  className={toolbarBtn}
+                  title="Crop"
+                  onClick={handleReferenceStartCrop}
+                >
+                  <svg
+                    className="h-4 w-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M6 2v14a2 2 0 002 2h14M2 6h14a2 2 0 012 2v14"
+                    />
+                  </svg>
+                </button>
+                <button
+                  className={toolbarBtn}
+                  title="Mirror"
+                  onClick={handleReferenceToggleMirror}
+                >
+                  <svg
+                    className="h-4 w-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M12 3v18M8 7l-4 4 4 4M16 7l4 4-4 4"
+                    />
+                  </svg>
+                </button>
+                <button
+                  className={toolbarBtn}
+                  title={selectedImage?.grayscale ? "Ungray" : "Gray"}
+                  onClick={handleReferenceToggleGray}
+                >
+                  <svg
+                    className="h-4 w-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <circle cx="12" cy="12" r="9" />
+                    <path strokeLinecap="round" d="M12 3a9 9 0 010 18" />
+                  </svg>
+                </button>
+                <button
+                  className={toolbarBtn}
+                  title="Rotate"
+                  onClick={handleReferenceRotate}
+                >
+                  <svg
+                    className="h-4 w-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M4 4v5h5M20 20v-5h-5M4 9a8 8 0 0114-3M20 15a8 8 0 01-14 3"
+                    />
+                  </svg>
+                </button>
+                <button
+                  className={toolbarBtn}
+                  title="Revert"
+                  onClick={handleReferenceRevert}
+                >
+                  <svg
+                    className="h-4 w-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M3 10h10a5 5 0 015 5v0a5 5 0 01-5 5H8M3 10l4-4M3 10l4 4"
+                    />
+                  </svg>
+                </button>
+
+                {/* ⋯ menu */}
+                <div className="relative">
+                  <button
+                    className={toolbarBtn}
+                    title="More options"
+                    onClick={() => setReferenceToolMenuOpen((v) => !v)}
+                  >
+                    <svg
+                      className="h-4 w-4"
+                      fill="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle cx="5" cy="12" r="1.5" />
+                      <circle cx="12" cy="12" r="1.5" />
+                      <circle cx="19" cy="12" r="1.5" />
+                    </svg>
+                  </button>
+                  {referenceToolMenuOpen && (
+                    <div
+                      className={`absolute right-0 bottom-full mb-2 z-50 w-40 overflow-hidden rounded-xl border shadow-2xl ${
+                        isDark
+                          ? "border-zinc-700 bg-[#242428]"
+                          : "border-slate-200 bg-white"
+                      }`}
+                    >
+                      <button
+                        onClick={() => {
+                          setReferenceToolMenuOpen(false);
+                          handleRemoveImage(selectedImageId);
+                        }}
+                        className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors ${
+                          isDark
+                            ? "text-slate-200 hover:bg-zinc-800"
+                            : "text-slate-700 hover:bg-slate-100"
+                        }`}
+                      >
+                        <svg
+                          className="h-4 w-4 text-[#E5989B]"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth={2}
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                          />
+                        </svg>
+                        Delete
+                      </button>
+                      <button
+                        onClick={copyReferenceImage}
+                        className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors ${
+                          isDark
+                            ? "text-slate-200 hover:bg-zinc-800"
+                            : "text-slate-700 hover:bg-slate-100"
+                        }`}
+                      >
+                        <svg
+                          className="h-4 w-4"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth={2}
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                          />
+                        </svg>
+                        Copy
+                      </button>
+                      <button
+                        onClick={exportReferenceImage}
+                        className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors ${
+                          isDark
+                            ? "text-slate-200 hover:bg-zinc-800"
+                            : "text-slate-700 hover:bg-slate-100"
+                        }`}
+                      >
+                        <svg
+                          className="h-4 w-4"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth={2}
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"
+                          />
+                        </svg>
+                        Export
+                      </button>
+                      {selectedImage?.palette &&
+                        selectedImage.palette.length > 0 && (
+                          <button
+                            onClick={exportReferencePalette}
+                            className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors ${
+                              isDark
+                                ? "text-slate-200 hover:bg-zinc-800"
+                                : "text-slate-700 hover:bg-slate-100"
+                            }`}
+                          >
+                            <svg
+                              className="h-4 w-4"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                              strokeWidth={2}
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="M4.098 19.902a3.75 3.75 0 005.304 0l3.75-3.75a3.75 3.75 0 00-5.304-5.304l-1.5 1.5m9-9l3.75-3.75a3.75 3.75 0 00-5.304-5.304l-1.5 1.5m0 0l3.75 3.75m-3.75-3.75l3.75 3.75"
+                              />
+                            </svg>
+                            Export Palette (.aco)
+                          </button>
+                        )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Crop action bar */}
+            {isReferenceToolCropMode && selectedImageId && (
+              <div
+                className="absolute bottom-6 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 rounded-xl border px-3 py-1.5 shadow-2xl"
+                style={{
+                  background: isDark ? "#242428" : "#fff",
+                  borderColor: isDark ? "#3f3f46" : "#e2e8f0",
+                }}
+                onPointerDown={(e) => e.stopPropagation()}
+              >
+                <button
+                  onClick={applyReferenceCrop}
+                  className="rounded-lg bg-[#A8C3A4] px-3 py-1 text-xs font-bold text-black transition-colors hover:bg-[#97b593]"
+                >
+                  Apply
+                </button>
+                <button
+                  onClick={cancelReferenceCrop}
+                  className={`rounded-lg px-3 py-1 text-xs font-semibold transition-colors ${
+                    isDark
+                      ? "text-slate-300 hover:bg-zinc-700"
+                      : "text-slate-600 hover:bg-slate-200"
+                  }`}
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
 
             {/* Floating Action Button — toggles category popover */}
             <button
@@ -798,6 +1367,7 @@ export default function App() {
         <FinishModal
           isDark={isDark}
           title={canvasTitle}
+          session={currentSession}
           onClose={() => setIsFinishModalOpen(false)}
           onSave={handleSaveToVault}
         />
@@ -806,25 +1376,8 @@ export default function App() {
       {/* Toast Notification */}
       {toast && (
         <div className="fixed bottom-6 left-1/2 z-[60] -translate-x-1/2">
-          <div className="flex items-center gap-3 rounded-xl border border-[#E5989B] bg-[#E5989B]/10 px-4 py-3 shadow-lg backdrop-blur-md">
-            <svg
-              className="h-5 w-5 flex-shrink-0 text-[#E5989B]"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-              />
-            </svg>
-            <span
-              className={`text-sm font-medium ${
-                isDark ? "text-slate-200" : "text-slate-800"
-              }`}
-            >
+          <div className="rounded-xl border border-slate-300 bg-white px-4 py-3 shadow-lg backdrop-blur-md">
+            <span className="text-sm font-medium text-slate-900">
               {toast.message}
             </span>
           </div>
@@ -894,35 +1447,23 @@ export default function App() {
                   isDark ? "bg-[#1F1F23]" : "bg-slate-100"
                 }`}
               >
-                {previewSession.previewImage ||
-                previewSession.images?.[0]?.url ||
-                previewSession.image ? (
+                {previewSession.image ? (
                   <img
-                    src={
-                      previewSession.previewImage ||
-                      previewSession.images?.[0]?.url ||
-                      previewSession.image
-                    }
+                    src={previewSession.image}
                     alt={previewSession.canvasTitle || previewSession.goal}
                     className="max-h-[400px] w-full object-contain"
                   />
                 ) : (
-                  <div className="flex h-64 w-full items-center justify-center">
-                    <svg
-                      className={`h-16 w-16 ${
-                        isDark ? "text-zinc-600" : "text-slate-300"
+                  <div className="flex h-64 w-full flex-col items-center justify-center gap-3">
+                    <span
+                      className={`inline-flex items-center rounded-full px-4 py-1.5 text-xs font-bold uppercase tracking-widest ${
+                        isDark
+                          ? "bg-[#252529] text-slate-300"
+                          : "bg-white text-slate-600 shadow-sm"
                       }`}
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth={1.5}
                     >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"
-                      />
-                    </svg>
+                      In Progress
+                    </span>
                   </div>
                 )}
               </div>
