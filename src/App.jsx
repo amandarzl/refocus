@@ -43,7 +43,11 @@ export default function App() {
   const [selectedSessionIds, setSelectedSessionIds] = useState([]);
   const [previewSession, setPreviewSession] = useState(null);
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
-  const [theme, setTheme] = useState("dark"); // 'dark' or 'light'
+  const [theme, setTheme] = useState(() => {
+    // Persist theme preference across sessions
+    const saved = localStorage.getItem("refocus-theme");
+    return saved === "light" || saved === "dark" ? saved : "dark";
+  });
   const [selectedGoal, setSelectedGoal] = useState("Cute & Cozy");
   const [canvasTitle, setCanvasTitle] = useState("Untitled Canvas");
   const [isFinishModalOpen, setIsFinishModalOpen] = useState(false);
@@ -194,7 +198,11 @@ export default function App() {
   }, [viewMode, handleCanvasWheel]);
 
   const toggleTheme = () => {
-    setTheme((prev) => (prev === "dark" ? "light" : "dark"));
+    setTheme((prev) => {
+      const next = prev === "dark" ? "light" : "dark";
+      localStorage.setItem("refocus-theme", next);
+      return next;
+    });
   };
 
   const resetCanvasState = useCallback(() => {
@@ -1318,7 +1326,7 @@ export default function App() {
             <button
               onClick={() => setIsCategoryPopoverOpen((prev) => !prev)}
               title="Add category photos"
-              className={`absolute bottom-6 left-6 z-20 flex h-14 w-14 items-center justify-center rounded-full text-2xl font-bold text-black shadow-xl transition-all hover:scale-105 hover:bg-[#97b593] ${
+              className={`absolute bottom-6 left-8 z-20 flex h-16 w-16 items-center justify-center rounded-full text-3xl font-bold text-black shadow-xl transition-all hover:scale-105 hover:bg-[#97b593] ${
                 isCategoryPopoverOpen
                   ? "bg-[#97b593] rotate-45"
                   : "bg-[#A8C3A4]"
