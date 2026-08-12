@@ -1326,7 +1326,7 @@ export default function App() {
             <button
               onClick={() => setIsCategoryPopoverOpen((prev) => !prev)}
               title="Add category photos"
-              className={`absolute bottom-6 left-8 z-20 flex h-16 w-16 items-center justify-center rounded-full text-3xl font-bold text-black shadow-xl transition-all hover:scale-105 hover:bg-[#97b593] ${
+              className={`absolute bottom-6 left-6 z-20 flex h-12 w-12 items-center justify-center rounded-full text-2xl font-bold text-black shadow-xl transition-all hover:scale-105 hover:bg-[#97b593] pb-[3px] ${
                 isCategoryPopoverOpen
                   ? "bg-[#97b593] rotate-45"
                   : "bg-[#A8C3A4]"
