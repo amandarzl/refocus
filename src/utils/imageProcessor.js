@@ -206,4 +206,80 @@ export function revokeObjectUrl(url) {
   }
 }
 
+// Convert a Blob straight to a base64 data URL (no blob-URL round trip) —
+// used for long-lived library items (e.g. Practice Mode references) that
+// need to persist in Dexie rather than a revocable object URL.
+export function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+// Shared upload pipeline: raw File objects (from a file input, drag & drop,
+// or clipboard paste) in, ready-to-store db.references rows out. Used by
+// FolderUploadModal's own dropzone and by any other drop target (e.g. the
+// Add References archive's empty-folder box) that wants the same
+// compress-then-base64 handling without duplicating it.
+export async function filesToReferences(files, folderId, tags = []) {
+  const imageFiles = Array.from(files).filter(
+    (file) => file && file.type && file.type.startsWith("image/"),
+  );
+  if (imageFiles.length === 0) return [];
+
+  const compressed = await Promise.all(
+    imageFiles.map((file) => compressImage(file, { preferWorker: true })),
+  );
+  const refs = [];
+  for (const result of compressed) {
+    if (!result.success) continue;
+    const src = await blobToBase64(result.blob);
+    refs.push({
+      folderId,
+      src,
+      width: result.width,
+      height: result.height,
+      tags,
+      createdAt: Date.now(),
+    });
+  }
+  return refs;
+}
+
+// On-demand palette extraction from an already-stored image (base64 data
+// URL or blob URL) — unlike extractPaletteFromData, this isn't tied to the
+// upload-compression pipeline, so it can run any time on any reference.
+export function extractPaletteFromImageSrc(src, count = 5) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      const MAX_SIZE = 200; // palette sampling doesn't need full resolution
+      let { width, height } = img;
+      if (width > height && width > MAX_SIZE) {
+        height = Math.round((height * MAX_SIZE) / width);
+        width = MAX_SIZE;
+      } else if (height > MAX_SIZE) {
+        width = Math.round((width * MAX_SIZE) / height);
+        height = MAX_SIZE;
+      }
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, width, height);
+      try {
+        const imageData = ctx.getImageData(0, 0, width, height);
+        resolve(extractPaletteFromData(imageData, count));
+      } catch (err) {
+        reject(err);
+      }
+    };
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
 export { extractPaletteFromData };

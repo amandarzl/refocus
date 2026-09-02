@@ -14,7 +14,7 @@ export default function TemplateModal({
 
       {/* Modal Container */}
       <div
-        className={`relative w-full max-w-3xl rounded-2xl border p-6 shadow-2xl sm:p-8 ${
+        className={`relative max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border p-6 shadow-2xl sm:p-8 ${
           isDark
             ? "border-zinc-800 bg-[#1F1F23] text-slate-100"
             : "border-slate-200 bg-white text-slate-900"

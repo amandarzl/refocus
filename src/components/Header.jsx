@@ -10,7 +10,6 @@ export default function Header({
   onToggleTheme,
   onLogoClick,
   onStartDrawing,
-  onSaveExit,
   onFinishDrawing,
 }) {
   const isDark = theme === "dark";
@@ -20,15 +19,27 @@ export default function Header({
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const userNameSetting = useLiveQuery(() => db.settings.get("username"), []);
-  const [userName, setUserName] = useState(userNameSetting?.value || "User");
+  const [userName, setUserName] = useState("User");
+  const hasLoadedUserName = useRef(false);
+  // Mirrors `userName` for the click-outside handler below, which is set up
+  // once (empty dep array) and would otherwise always see the "User" from
+  // that first render — a ref's `.current` stays live across renders.
+  const userNameRef = useRef(userName);
   const dropdownRef = useRef(null);
   const menuRef = useRef(null);
+  const importFileInputRef = useRef(null);
 
   useEffect(() => {
     setTempTitle(canvasTitle);
   }, [canvasTitle]);
 
+  // Pull the saved name from the DB exactly once, the first time the live
+  // query resolves — never again after. Syncing on every resolve fought
+  // with typing: each keystroke wrote to the DB, the live query re-fired,
+  // and this effect stomped the input with that (slightly delayed) value.
   useEffect(() => {
+    if (hasLoadedUserName.current || userNameSetting === undefined) return;
+    hasLoadedUserName.current = true;
     setUserName(userNameSetting?.value || "User");
   }, [userNameSetting]);
 
@@ -39,15 +50,28 @@ export default function Header({
   };
 
   useEffect(() => {
-    db.settings.put({ key: "username", value: userName });
+    userNameRef.current = userName;
   }, [userName]);
+
+  // Commit on blur/Enter, not on every keystroke — same pattern as the
+  // canvas-title rename above and the folder rename in FolderList.jsx.
+  const commitUserName = () => {
+    const finalName = (userNameRef.current || "").trim() || "User";
+    setUserName(finalName);
+    db.settings.put({ key: "username", value: finalName });
+  };
 
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        // Clicking outside closes (unmounts) the dropdown immediately, which
+        // can beat the input's own blur event to the punch — commit here
+        // explicitly so a click-away doesn't silently drop an in-progress edit.
+        commitUserName();
         setIsProfileOpen(false);
       }
       if (menuRef.current && !menuRef.current.contains(event.target)) {
+        commitUserName();
         setIsMenuOpen(false);
       }
     };
@@ -58,7 +82,7 @@ export default function Header({
   const handleExportVault = async () => {
     const sessions = await db.sessions.toArray();
     if (!sessions || sessions.length === 0) {
-      alert("No vault data found to export.");
+      alert("Your Gallery Vault is empty — there's nothing to back up yet.");
       return;
     }
     const blob = new Blob([JSON.stringify(sessions)], {
@@ -74,6 +98,35 @@ export default function Header({
     URL.revokeObjectURL(url);
   };
 
+  const handleImportVault = () => {
+    importFileInputRef.current?.click();
+  };
+
+  // Always adds the backup's drawings as new entries in the Gallery Vault —
+  // never overwrites or replaces anything already there, same "never
+  // destructive by default" rule the rest of the app follows.
+  const handleImportFileSelected = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // lets the same file be picked again later
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const sessions = JSON.parse(text);
+      if (!Array.isArray(sessions) || sessions.length === 0) {
+        alert("That file doesn't look like a ReFocus backup — nothing was imported.");
+        return;
+      }
+      const withoutIds = sessions.map(({ id, ...rest }) => rest);
+      await db.sessions.bulkAdd(withoutIds);
+      alert(
+        `Added ${withoutIds.length} drawing${withoutIds.length === 1 ? "" : "s"} from the backup to your Gallery Vault.`,
+      );
+    } catch (err) {
+      console.error("Vault import failed:", err);
+      alert("Couldn't read that file — make sure it's a ReFocus backup file.");
+    }
+  };
+
   return (
     <header
       className={`sticky top-0 z-50 border-b backdrop-blur-md ${
@@ -82,6 +135,15 @@ export default function Header({
           : "border-slate-200 bg-white/80"
       }`}
     >
+      {/* Shared by both the desktop and mobile "Restore from a Backup"
+          buttons below — kept off-screen, triggered via the ref. */}
+      <input
+        ref={importFileInputRef}
+        type="file"
+        accept=".json,application/json"
+        onChange={handleImportFileSelected}
+        className="hidden"
+      />
       <div className="relative flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
         {/* Logo / Brand + Breadcrumb Title */}
         <div className="flex min-w-0 items-center gap-2">
@@ -138,12 +200,13 @@ export default function Header({
                       setIsEditing(false);
                     }
                   }}
-                  className={`rounded bg-blue-500/10 font-bold text-sm outline-none focus:ring-1 focus:ring-blue-500/50 w-full min-w-[60px] max-w-[200px] ${
+                  className={`max-w-[200px] rounded bg-blue-500/10 font-bold text-sm outline-none focus:ring-1 focus:ring-blue-500/50 ${
                     isDark
                       ? "text-white caret-white placeholder-zinc-500"
                       : "text-slate-900 caret-slate-900 placeholder:text-slate-400"
                   }`}
                   style={{
+                    width: `${Math.max(tempTitle.length, 1) + 1}ch`,
                     color: isDark ? "#ffffff" : "#0f172a",
                     textShadow: isDark
                       ? "0 0 2px rgba(255,255,255,0.8)"
@@ -262,34 +325,33 @@ export default function Header({
                       type="text"
                       value={userName}
                       onChange={(e) => setUserName(e.target.value)}
+                      onBlur={commitUserName}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") e.target.blur();
+                      }}
                       className="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-blue-500 w-full"
                     />
                   </div>
 
                   <button
                     onClick={handleExportVault}
+                    title="Downloads a backup file of every drawing saved in your Gallery Vault"
                     className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-zinc-800 transition-colors text-sm text-zinc-300 hover:text-white"
                   >
-                    <span>📥</span>
-                    <span>Export Vault Backup (.json)</span>
+                    <span>💾</span>
+                    <span>Save a Backup</span>
+                  </button>
+                  <button
+                    onClick={handleImportVault}
+                    title="Adds drawings from a backup file back into your Gallery Vault"
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-zinc-800 transition-colors text-sm text-zinc-300 hover:text-white"
+                  >
+                    <span>📂</span>
+                    <span>Restore from a Backup</span>
                   </button>
                 </div>
               )}
             </div>
-
-            {viewMode === "workspace" && (
-              /* Workspace view: Save & Exit */
-              <button
-                onClick={onSaveExit}
-                className={`rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
-                  isDark
-                    ? "text-slate-300 hover:bg-zinc-800"
-                    : "text-slate-600 hover:bg-slate-200"
-                }`}
-              >
-                Save Draft
-              </button>
-            )}
           </div>
 
           {/* Finish button - always visible */}
@@ -400,6 +462,10 @@ export default function Header({
                       type="text"
                       value={userName}
                       onChange={(e) => setUserName(e.target.value)}
+                      onBlur={commitUserName}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") e.target.blur();
+                      }}
                       className={`w-full rounded-lg border px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 ${
                         isDark
                           ? "border-zinc-700 bg-zinc-800 text-zinc-200"
@@ -409,48 +475,29 @@ export default function Header({
                   </div>
                   <button
                     onClick={handleExportVault}
+                    title="Downloads a backup file of every drawing saved in your Gallery Vault"
                     className={`w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
                       isDark
                         ? "text-slate-300 hover:bg-zinc-800"
                         : "text-slate-600 hover:bg-slate-100"
                     }`}
                   >
-                    <span>📥</span>
-                    <span>Export Vault Backup (.json)</span>
+                    <span>💾</span>
+                    <span>Save a Backup</span>
+                  </button>
+                  <button
+                    onClick={handleImportVault}
+                    title="Adds drawings from a backup file back into your Gallery Vault"
+                    className={`w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                      isDark
+                        ? "text-slate-300 hover:bg-zinc-800"
+                        : "text-slate-600 hover:bg-slate-100"
+                    }`}
+                  >
+                    <span>📂</span>
+                    <span>Restore from a Backup</span>
                   </button>
                 </div>
-
-                {viewMode === "workspace" && (
-                  <>
-                    <div className="border-t mt-1 pt-1" />
-                    <button
-                      onClick={() => {
-                        onSaveExit();
-                        setIsMenuOpen(false);
-                      }}
-                      className={`w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-                        isDark
-                          ? "text-slate-300 hover:bg-zinc-800"
-                          : "text-slate-600 hover:bg-slate-100"
-                      }`}
-                    >
-                      <svg
-                        className="h-5 w-5"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        strokeWidth={2}
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
-                        />
-                      </svg>
-                      <span>Save Draft</span>
-                    </button>
-                  </>
-                )}
               </div>
             )}
           </div>
