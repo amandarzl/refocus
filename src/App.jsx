@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import Header from "./components/Header.jsx";
-import TemplateModal from "./components/TemplateModal.jsx";
+import NewDrawingModal from "./components/NewDrawingModal.jsx";
 import FinishModal from "./components/FinishModal.jsx";
 import ReferenceBoard from "./components/board/ReferenceBoard.jsx";
 import ReferenceLibrary from "./components/library/ReferenceLibrary.jsx";
@@ -12,45 +12,17 @@ import { db } from "./db.js";
 import { revokeObjectUrl } from "./utils/imageProcessor.js";
 import { DEFAULT_TRANSFORM } from "./components/board/constants.js";
 
-const TEMPLATES = [
-  {
-    id: "cute-cozy",
-    name: "Illustration Art",
-    description: "Narrative focus, polished visual storytelling",
-  },
-  {
-    id: "dynamic-action",
-    name: "Anatomy & Gesture",
-    description: "Figure drawing and dynamic poses",
-  },
-  {
-    id: "blank-canvas",
-    name: "Blank Canvas",
-    description: "Freeform framework",
-  },
-];
-
-// Each template's starter categories — auto-attached (with an empty slot,
-// or pre-filled if the folder already has photos) the moment that template
-// is selected for a new drawing. Blank Canvas has no entry: it's the
-// freeform option and stays genuinely empty (see handleSelectTemplate).
-const TEMPLATE_FOLDER_SETS = {
-  "Illustration Art": ["Form", "Pose", "Color", "Vibe"],
-  "Anatomy & Gesture": ["Gesture", "Anatomy", "Hands & Feet", "Dynamic Poses"],
-};
-
 export default function App() {
   const [viewMode, setViewMode] = useState("hub");
   const [currentSession, setCurrentSession] = useState(null);
   const [selectedSessionIds, setSelectedSessionIds] = useState([]);
   const [previewSession, setPreviewSession] = useState(null);
-  const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
+  const [isNewDrawingModalOpen, setIsNewDrawingModalOpen] = useState(false);
   const [theme, setTheme] = useState(() => {
     // Persist theme preference across sessions
     const saved = localStorage.getItem("refocus-theme");
     return saved === "light" || saved === "dark" ? saved : "dark";
   });
-  const [selectedGoal, setSelectedGoal] = useState("Illustration Art");
   const [canvasTitle, setCanvasTitle] = useState("Untitled Canvas");
   const [isFinishModalOpen, setIsFinishModalOpen] = useState(false);
   // Lives here (not in ReferenceBoard) so the header can hide alongside the
@@ -140,84 +112,34 @@ export default function App() {
     setBoardOrder([]);
   }, []);
 
-  // Makes sure `templateName`'s starter categories exist as real folders,
-  // adopting an existing same-named folder (stamping it with this
-  // template's tag) rather than creating a duplicate — this is what lets
-  // an install's existing Form/Pose/Color/Vibe get picked up as
-  // "Illustration Art"'s set the first time it's selected post-update,
-  // instead of doubling them. Returns the resolved folder rows, in order.
-  const ensureTemplateFolders = async (templateName) => {
-    const names = TEMPLATE_FOLDER_SETS[templateName];
-    if (!names) return [];
-    const existing = await db.folders.toArray();
-    const resolved = [];
-    for (let i = 0; i < names.length; i++) {
-      const name = names[i];
-      const match = existing.find((f) => (f.name || "").toLowerCase() === name.toLowerCase());
-      if (match) {
-        if (match.templateTag !== templateName || !match.isDefault) {
-          await db.folders.update(match.id, { templateTag: templateName, isDefault: true });
-        }
-        resolved.push(match);
-      } else {
-        const newId = await db.folders.add({
-          name,
-          order: existing.length + i,
-          createdAt: Date.now(),
-          isDefault: true,
-          templateTag: templateName,
-        });
-        resolved.push({ id: newId, name });
-      }
-    }
-    return resolved;
-  };
-
-  // A brand-new board's template folders always start attached — pre-
-  // filled with whatever's already in their archive instead of an empty
-  // "+" slot when they have photos, but attached (with an empty slot) even
-  // when they don't, so they can be detached/reattached like any other
-  // folder from here on. `isDefault`/`templateTag` only control this
-  // initial auto-attach; neither makes a folder permanent afterward.
-  const buildInitialBoardSlots = async (templateName) => {
-    const templateFolders = await ensureTemplateFolders(templateName);
-    const slots = [];
-    for (const folder of templateFolders) {
-      const latest = await db.references
-        .where("folderId")
-        .equals(folder.id)
-        .last();
-      slots.push({
-        folderId: folder.id,
-        activeReferenceId: latest ? latest.id : null,
-        locked: false,
-        transform: DEFAULT_TRANSFORM,
-      });
-    }
-    return slots;
-  };
-
-  const handleSelectTemplate = async (template) => {
+  // Replaces the old template-driven setup: the folders to attach are
+  // whatever the user explicitly picked in NewDrawingModal, not implied by
+  // a named theme. An empty `folderIds` array naturally produces an empty
+  // board — that's the old "Blank Canvas" option, generalized to just be
+  // what "select nothing" already does, with no special-case branch needed.
+  const handleStartDrawing = async ({ title, folderIds }) => {
     // A brand-new drawing must never inherit a pointer to whatever session
     // was last saved/opened — without this, saving this drawing later could
     // silently overwrite that unrelated vault entry instead of creating its
     // own.
     setCurrentSession(null);
     setBoardOrder([]);
-    // Blank Canvas is the freeform option — it stays genuinely empty rather
-    // than pre-filling from the archive like the other templates do.
-    const isBlankCanvas = template.name === "Blank Canvas";
-    setBoardSlots(isBlankCanvas ? [] : await buildInitialBoardSlots(template.name));
-    setSelectedGoal(template.name);
 
-    // Map template selections to default clean title strings
-    if (isBlankCanvas) {
-      setCanvasTitle("Untitled Canvas");
-    } else {
-      setCanvasTitle(template.name);
+    const slots = [];
+    for (const folderId of folderIds) {
+      const latest = await db.references.where("folderId").equals(folderId).last();
+      slots.push({
+        folderId,
+        activeReferenceId: latest ? latest.id : null,
+        locked: false,
+        transform: DEFAULT_TRANSFORM,
+      });
     }
+    setBoardSlots(slots);
+    setCanvasTitle(title);
+    await db.settings.put({ key: "lastNewDrawingFolderIds", value: folderIds });
 
-    setIsTemplateModalOpen(false);
+    setIsNewDrawingModalOpen(false);
     setViewMode("workspace");
   };
 
@@ -310,7 +232,6 @@ export default function App() {
       // Brand-new drawing: create a fresh Gallery Vault entry
       const newId = await db.sessions.add({
         ...sessionPayload,
-        goal: selectedGoal,
         date: new Date().toLocaleDateString(undefined, {
           year: "numeric",
           month: "short",
@@ -346,7 +267,6 @@ export default function App() {
     setCurrentSession(session);
     setBoardSlots(session.canvasState?.boardSlots || []);
     setBoardOrder(session.canvasState?.boardOrder || []);
-    setSelectedGoal(session.goal);
     setCanvasTitle(session.canvasTitle || "Untitled Canvas");
     setViewMode("workspace");
   };
@@ -385,7 +305,7 @@ export default function App() {
     }
   };
 
-  const openTemplateModal = () => setIsTemplateModalOpen(true);
+  const openNewDrawingModal = () => setIsNewDrawingModalOpen(true);
 
   return (
     <div
@@ -403,7 +323,7 @@ export default function App() {
           onTitleChange={setCanvasTitle}
           onToggleTheme={toggleTheme}
           onLogoClick={handleLogoClick}
-          onStartDrawing={openTemplateModal}
+          onStartDrawing={openNewDrawingModal}
           onFinishDrawing={() => setIsFinishModalOpen(true)}
         />
       )}
@@ -417,12 +337,12 @@ export default function App() {
                 Ready to create without the burnout?
               </h1>
               <p className="mt-4 text-base text-ink-secondary sm:text-lg">
-                Banish reference hoarding. Pick a template framework and protect
+                Banish reference hoarding. Pick your folders and protect
                 your creative flow state.
               </p>
               <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-                <Button variant="primary" onClick={openTemplateModal} className="shadow-card sm:text-base">
-                  + Start new drawing goal
+                <Button variant="primary" onClick={openNewDrawingModal} className="shadow-card sm:text-base">
+                  + Start new drawing
                 </Button>
                 <Button variant="secondary" onClick={() => setViewMode("library")} className="shadow-card sm:text-base">
                   📁 Add references
@@ -623,12 +543,11 @@ export default function App() {
         </div>
       )}
 
-      {/* Template Selector Modal */}
-      {isTemplateModalOpen && (
-        <TemplateModal
-          templates={TEMPLATES}
-          onClose={() => setIsTemplateModalOpen(false)}
-          onSelect={handleSelectTemplate}
+      {/* New Drawing Setup Modal */}
+      {isNewDrawingModalOpen && (
+        <NewDrawingModal
+          onClose={() => setIsNewDrawingModalOpen(false)}
+          onStartDrawing={handleStartDrawing}
         />
       )}
 

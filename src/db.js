@@ -27,8 +27,10 @@ export class ReFocusDB extends Dexie {
     // References now key off a numeric folderId instead of a fixed
     // category string. Existing v2 references are remapped onto freshly
     // created default folders; brand-new installs get an empty `folders`
-    // table (seeded at the app level — see ReferenceBoard.jsx — since
-    // Dexie doesn't run upgrade() for databases that never existed).
+    // table (Dexie doesn't run upgrade() for databases that never
+    // existed) — NewDrawingModal.jsx is what gives a first-time user
+    // their first folders, via its quick-add suggestions or "+ New
+    // folder" row.
     this.version(3)
       .stores({
         sessions: "++id, goal, date, canvasTitle",

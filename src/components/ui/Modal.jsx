@@ -11,7 +11,7 @@ const MAX_WIDTHS = {
 };
 
 // Shared modal shell — the fixed-overlay + backdrop-blur + rounded panel
-// chrome that TemplateModal, FinishModal, ConfirmDialog, and the Gallery
+// chrome that NewDrawingModal, FinishModal, ConfirmDialog, and the Gallery
 // Vault preview lightbox in App.jsx used to each hand-roll separately (each
 // with its own slightly different z-index). Callers only ever provide the
 // panel's content; this owns the overlay, the click-to-close backdrop, the
