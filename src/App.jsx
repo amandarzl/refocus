@@ -1,10 +1,13 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import Header from "./components/Header.jsx";
 import TemplateModal from "./components/TemplateModal.jsx";
 import FinishModal from "./components/FinishModal.jsx";
 import ReferenceBoard from "./components/board/ReferenceBoard.jsx";
 import ReferenceLibrary from "./components/library/ReferenceLibrary.jsx";
+import Button from "./components/ui/Button.jsx";
+import Modal from "./components/ui/Modal.jsx";
+import EmptyTile from "./components/ui/EmptyTile.jsx";
 import { db } from "./db.js";
 import { revokeObjectUrl } from "./utils/imageProcessor.js";
 import { DEFAULT_TRANSFORM } from "./components/board/constants.js";
@@ -116,6 +119,15 @@ export default function App() {
   const [boardOrder, setBoardOrder] = useState([]);
 
   const isDark = theme === "dark";
+
+  // The color tokens in index.css are keyed on `:root[data-theme]` — `:root`
+  // is always the <html> element in CSS, never this component's own div, so
+  // the attribute has to live there for the tokens to actually switch. (The
+  // static data-theme on <html> in index.html is only a pre-hydration
+  // fallback for the first paint.)
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+  }, [theme]);
 
   const toggleTheme = () => {
     setTheme((prev) => {
@@ -380,9 +392,7 @@ export default function App() {
   return (
     <div
       data-theme={theme}
-      className={`h-screen flex flex-col overflow-hidden transition-colors duration-300 ${
-        isDark ? "bg-[#1A1A1E] text-slate-100" : "bg-slate-50 text-slate-900"
-      }`}
+      className="flex h-screen flex-col overflow-hidden bg-surface-canvas text-ink-primary transition-colors duration-300"
     >
       {/* Hidden while Focus Lock is on — Home/Finish/theme/profile become
           unreachable until you unlock, same as the board's own controls;
@@ -403,74 +413,46 @@ export default function App() {
       {viewMode === "hub" ? (
         <main className="flex-1 overflow-y-auto">
           {/* Hero Section */}
-          <section
-            className={`mx-auto flex max-w-3xl flex-col items-center px-6 pt-20 pb-16 text-center sm:pt-28 ${
-              isDark ? "text-slate-100" : "text-slate-900"
-            }`}
-          >
-            <div
-              className={`w-full rounded-2xl p-10 sm:p-14 shadow-xl border ${
-                isDark
-                  ? "bg-[#242428] border-zinc-800"
-                  : "bg-white border-slate-200"
-              }`}
-            >
-              <h1 className="text-3xl font-extrabold tracking-tight sm:text-5xl">
+          <section className="mx-auto flex max-w-3xl flex-col items-center px-6 pt-20 pb-16 text-center sm:pt-28">
+            <div className="w-full rounded-panel border border-border bg-surface-raised p-10 shadow-card sm:p-14">
+              <h1 className="font-display text-3xl font-semibold tracking-tight text-balance sm:text-5xl">
                 Ready to create without the burnout?
               </h1>
-              <p
-                className={`mt-4 text-base sm:text-lg ${
-                  isDark ? "text-slate-400" : "text-slate-500"
-                }`}
-              >
+              <p className="mt-4 text-base text-ink-secondary sm:text-lg">
                 Banish reference hoarding. Pick a template framework and protect
                 your creative flow state.
               </p>
               <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-                <button
-                  onClick={openTemplateModal}
-                  className="rounded-xl bg-[#A8C3A4] px-6 py-3 text-sm font-bold text-black shadow-lg transition-colors hover:bg-[#97b593] sm:text-base"
-                >
-                  + START NEW DRAWING GOAL
-                </button>
-                <button
-                  onClick={() => setViewMode("library")}
-                  className="rounded-xl border border-slate-300 bg-white px-6 py-3 text-sm font-bold text-slate-900 shadow-lg transition-colors hover:bg-slate-100 sm:text-base"
-                >
-                  📁 ADD REFERENCES
-                </button>
+                <Button variant="primary" onClick={openTemplateModal} className="shadow-card sm:text-base">
+                  + Start new drawing goal
+                </Button>
+                <Button variant="secondary" onClick={() => setViewMode("library")} className="shadow-card sm:text-base">
+                  📁 Add references
+                </Button>
               </div>
             </div>
           </section>
 
           {/* Gallery Vault Section */}
-          <section
-            className={`mx-auto max-w-6xl px-6 pb-20 ${
-              isDark ? "text-slate-100" : "text-slate-900"
-            }`}
-          >
+          <section className="mx-auto max-w-6xl px-6 pb-20 text-ink-primary">
             <div className="mb-4 flex items-center gap-3">
-              <h2 className="text-sm font-bold uppercase tracking-widest">
+              <h2 className="text-sm font-bold uppercase tracking-widest text-ink-secondary">
                 Your Gallery Vault ({savedSessions?.length || 0})
               </h2>
-              <div className="h-px flex-1 bg-zinc-700/40" />
+              <div className="h-px flex-1 bg-border" />
               {savedSessions?.length > 0 && (
                 <div className="flex items-center gap-2">
                   {selectedSessionIds.length > 0 && (
                     <button
                       onClick={handleDeleteSelected}
-                      className="rounded-lg bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-500 transition-colors hover:bg-red-500/20"
+                      className="rounded-control bg-danger/10 px-3 py-1.5 text-xs font-semibold text-danger transition-colors hover:bg-danger/20"
                     >
                       Delete ({selectedSessionIds.length})
                     </button>
                   )}
                   <button
                     onClick={handleSelectAll}
-                    className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
-                      isDark
-                        ? "bg-zinc-800 text-slate-300 hover:bg-zinc-700"
-                        : "bg-slate-200 text-slate-700 hover:bg-slate-300"
-                    }`}
+                    className="rounded-control bg-surface-sunken px-3 py-1.5 text-xs font-semibold text-ink-secondary transition-colors hover:bg-surface-raised hover:text-ink-primary"
                   >
                     {selectedSessionIds.length === visibleSessions?.length
                       ? "Deselect All"
@@ -487,32 +469,24 @@ export default function App() {
                   value={gallerySearch}
                   onChange={(e) => setGallerySearch(e.target.value)}
                   placeholder="Search by title, goal, or notes…"
-                  className={`min-w-[180px] flex-1 rounded-lg border px-3 py-1.5 text-sm outline-none transition-colors focus:border-[#A8C3A4] ${
-                    isDark
-                      ? "border-zinc-700 bg-[#1F1F23] text-slate-100 placeholder:text-zinc-500"
-                      : "border-slate-300 bg-white text-slate-900 placeholder:text-slate-400"
-                  }`}
+                  className="min-w-[180px] flex-1 rounded-control border border-border bg-surface-raised px-3 py-1.5 text-sm text-ink-primary placeholder:text-ink-muted outline-none transition-colors focus:border-accent-primary"
                 />
                 <select
                   value={gallerySortOrder}
                   onChange={(e) => setGallerySortOrder(e.target.value)}
-                  className={`rounded-lg border px-2 py-1.5 text-xs ${
-                    isDark ? "border-zinc-700 bg-zinc-800 text-slate-200" : "border-slate-300 bg-white text-slate-700"
-                  }`}
+                  className="rounded-control border border-border bg-surface-raised px-2 py-1.5 text-xs text-ink-secondary"
                 >
                   <option value="newest">Newest first</option>
                   <option value="oldest">Oldest first</option>
                 </select>
-                <div className={`flex items-center gap-1.5 text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                <div className="flex items-center gap-1.5 text-xs text-ink-secondary">
                   <label htmlFor="gallery-date-from">From</label>
                   <input
                     id="gallery-date-from"
                     type="date"
                     value={galleryDateFrom}
                     onChange={(e) => setGalleryDateFrom(e.target.value)}
-                    className={`rounded-lg border px-2 py-1 text-xs ${
-                      isDark ? "border-zinc-700 bg-zinc-800 text-slate-200" : "border-slate-300 bg-white text-slate-700"
-                    }`}
+                    className="rounded-control border border-border bg-surface-raised px-2 py-1 text-xs text-ink-secondary"
                   />
                   <label htmlFor="gallery-date-to">To</label>
                   <input
@@ -520,17 +494,13 @@ export default function App() {
                     type="date"
                     value={galleryDateTo}
                     onChange={(e) => setGalleryDateTo(e.target.value)}
-                    className={`rounded-lg border px-2 py-1 text-xs ${
-                      isDark ? "border-zinc-700 bg-zinc-800 text-slate-200" : "border-slate-300 bg-white text-slate-700"
-                    }`}
+                    className="rounded-control border border-border bg-surface-raised px-2 py-1 text-xs text-ink-secondary"
                   />
                 </div>
                 {(gallerySearch || galleryDateFrom || galleryDateTo) && (
                   <button
                     onClick={clearGalleryFilters}
-                    className={`rounded-lg px-3 py-1.5 text-xs font-semibold underline transition-colors ${
-                      isDark ? "text-slate-400 hover:text-slate-200" : "text-slate-500 hover:text-slate-700"
-                    }`}
+                    className="rounded-control px-3 py-1.5 text-xs font-semibold text-ink-muted underline transition-colors hover:text-ink-primary"
                   >
                     Clear filters
                   </button>
@@ -539,59 +509,28 @@ export default function App() {
             )}
 
             {!savedSessions?.length ? (
-              <div
-                className={`flex flex-col items-center justify-center rounded-2xl border-2 border-dashed p-16 text-center ${
-                  isDark
-                    ? "border-zinc-700 bg-[#1F1F23]"
-                    : "border-slate-300 bg-white"
-                }`}
-              >
-                <svg
-                  className={`h-12 w-12 ${
-                    isDark ? "text-zinc-600" : "text-slate-300"
-                  }`}
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={1.5}
-                >
+              <EmptyTile size="wide" className="gap-3">
+                <svg className="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"
                   />
                 </svg>
-                <p
-                  className={`mt-4 text-sm font-medium ${
-                    isDark ? "text-slate-400" : "text-slate-500"
-                  }`}
-                >
+                <p className="text-sm font-medium">
                   No saved sessions yet. Finish a drawing or save & exit to
                   build your vault.
                 </p>
-              </div>
+              </EmptyTile>
             ) : visibleSessions?.length === 0 ? (
-              <div
-                className={`flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed p-16 text-center ${
-                  isDark
-                    ? "border-zinc-700 bg-[#1F1F23]"
-                    : "border-slate-300 bg-white"
-                }`}
-              >
-                <p
-                  className={`text-sm font-medium ${
-                    isDark ? "text-slate-400" : "text-slate-500"
-                  }`}
-                >
+              <EmptyTile size="wide" className="gap-3">
+                <p className="text-sm font-medium">
                   No saved drawings match your search or date filter.
                 </p>
-                <button
-                  onClick={clearGalleryFilters}
-                  className="rounded-lg bg-[#A8C3A4] px-3 py-1.5 text-xs font-bold text-black transition-colors hover:bg-[#97b593]"
-                >
+                <Button variant="primary" onClick={clearGalleryFilters} className="text-xs">
                   Clear filters
-                </button>
-              </div>
+                </Button>
+              </EmptyTile>
             ) : (
               <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
                 {visibleSessions?.map((session) => {
@@ -600,12 +539,10 @@ export default function App() {
                     <div
                       key={session.id}
                       onClick={() => handleOpenSession(session)}
-                      className={`group cursor-pointer overflow-hidden rounded-2xl border shadow-md transition-all hover:scale-[1.02] hover:shadow-xl ${
+                      className={`group cursor-pointer overflow-hidden rounded-panel border shadow-card transition-all hover:scale-[1.02] hover:shadow-2xl ${
                         isSelected
-                          ? "border-emerald-500/80 ring-1 ring-emerald-500/50"
-                          : isDark
-                            ? "border-zinc-800 bg-[#242428]"
-                            : "border-slate-200 bg-white"
+                          ? "border-accent-primary ring-1 ring-accent-primary/50"
+                          : "border-border bg-surface-raised"
                       }`}
                     >
                       <div className="relative">
@@ -616,20 +553,8 @@ export default function App() {
                             className="h-44 w-full object-cover"
                           />
                         ) : (
-                          <div
-                            className={`flex h-44 w-full items-center justify-center ${
-                              isDark ? "bg-[#1F1F23]" : "bg-slate-100"
-                            }`}
-                          >
-                            <svg
-                              className={`h-10 w-10 ${
-                                isDark ? "text-zinc-600" : "text-slate-300"
-                              }`}
-                              fill="none"
-                              viewBox="0 0 24 24"
-                              stroke="currentColor"
-                              strokeWidth={1.5}
-                            >
+                          <div className="flex h-44 w-full items-center justify-center bg-surface-sunken">
+                            <svg className="h-10 w-10 text-ink-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                               <path
                                 strokeLinecap="round"
                                 strokeLinejoin="round"
@@ -647,7 +572,7 @@ export default function App() {
                               e.stopPropagation();
                               toggleSelectSession(session.id);
                             }}
-                            className="h-4 w-4 cursor-pointer accent-emerald-500"
+                            className="h-4 w-4 cursor-pointer accent-accent-primary"
                           />
                         </div>
                         <div className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all group-hover:bg-black/40 group-hover:opacity-100 group-focus-within:bg-black/40 group-focus-within:opacity-100">
@@ -656,7 +581,7 @@ export default function App() {
                               e.stopPropagation();
                               setPreviewSession(session);
                             }}
-                            className="rounded-lg bg-white/90 px-3 py-1.5 text-xs font-semibold text-black backdrop-blur-sm transition-colors hover:bg-white"
+                            className="rounded-control bg-white/90 px-3 py-1.5 text-xs font-semibold text-black backdrop-blur-sm transition-colors hover:bg-white"
                           >
                             🔍 Preview Canvas
                           </button>
@@ -664,26 +589,14 @@ export default function App() {
                       </div>
                       <div className="p-5">
                         <div className="flex items-center justify-between">
-                          <span className="text-xs font-semibold tracking-wider text-[#A8C3A4] truncate max-w-[180px]">
+                          <span className="max-w-[180px] truncate text-xs font-semibold tracking-wider text-accent-primary">
                             {session.canvasTitle || session.goal}
                           </span>
-                          <span
-                            className={`text-xs flex-shrink-0 ${
-                              isDark ? "text-zinc-500" : "text-slate-400"
-                            }`}
-                          >
-                            {session.date}
-                          </span>
+                          <span className="flex-shrink-0 text-xs text-ink-muted">{session.date}</span>
                         </div>
 
                         {session.notes && (
-                          <p
-                            className={`mt-2 text-sm line-clamp-2 ${
-                              isDark ? "text-slate-400" : "text-slate-500"
-                            }`}
-                          >
-                            {session.notes}
-                          </p>
+                          <p className="mt-2 line-clamp-2 text-sm text-ink-secondary">{session.notes}</p>
                         )}
                       </div>
                     </div>
@@ -737,26 +650,13 @@ export default function App() {
 
       {/* Editable Preview Lightbox Modal */}
       {previewSession && (
-        <div
-          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-sm"
-          onClick={() => setPreviewSession(null)}
-        >
-          <div
-            className={`relative mx-4 max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl shadow-2xl ${
-              isDark ? "bg-[#242428]" : "bg-white"
-            }`}
-            onClick={(e) => e.stopPropagation()}
-          >
+        <Modal onClose={() => setPreviewSession(null)} maxWidth="3xl" labelledBy="preview-session-title">
+          <div className="max-h-[90vh] overflow-y-auto">
             {/* Modal Header */}
-            <div
-              className={`sticky top-0 z-10 flex items-center justify-between border-b px-6 py-4 ${
-                isDark
-                  ? "border-zinc-700 bg-[#242428]"
-                  : "border-slate-200 bg-white"
-              }`}
-            >
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-surface-overlay px-6 py-4">
               <div className="flex-1">
                 <input
+                  id="preview-session-title"
                   type="text"
                   value={
                     previewSession.canvasTitle || previewSession.goal || ""
@@ -768,26 +668,16 @@ export default function App() {
                       e.target.value,
                     )
                   }
-                  className={`w-full bg-transparent text-lg font-bold outline-none ${
-                    isDark ? "text-slate-100" : "text-slate-900"
-                  }`}
+                  className="w-full bg-transparent text-lg font-bold text-ink-primary outline-none"
                   placeholder="Canvas Title"
                 />
-                <p
-                  className={`mt-1 text-xs ${
-                    isDark ? "text-zinc-500" : "text-slate-400"
-                  }`}
-                >
-                  {previewSession.date}
-                </p>
+                <p className="mt-1 text-xs text-ink-muted">{previewSession.date}</p>
               </div>
               <button
                 onClick={() => setPreviewSession(null)}
-                className={`ml-4 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-xl transition-colors ${
-                  isDark
-                    ? "text-slate-400 hover:bg-zinc-700"
-                    : "text-slate-600 hover:bg-slate-200"
-                }`}
+                aria-label="Close"
+                title="Close"
+                className="ml-4 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-control text-xl text-ink-secondary transition-colors hover:bg-surface-sunken"
               >
                 ✕
               </button>
@@ -795,11 +685,7 @@ export default function App() {
 
             {/* Modal Body - Drawing Snapshot */}
             <div className="p-6">
-              <div
-                className={`flex items-center justify-center overflow-hidden rounded-xl ${
-                  isDark ? "bg-[#1F1F23]" : "bg-slate-100"
-                }`}
-              >
+              <div className="flex items-center justify-center overflow-hidden rounded-panel bg-surface-sunken">
                 {previewSession.image ? (
                   <img
                     src={previewSession.image}
@@ -808,13 +694,7 @@ export default function App() {
                   />
                 ) : (
                   <div className="flex h-64 w-full flex-col items-center justify-center gap-3">
-                    <span
-                      className={`inline-flex items-center rounded-full px-4 py-1.5 text-xs font-bold uppercase tracking-widest ${
-                        isDark
-                          ? "bg-[#252529] text-slate-300"
-                          : "bg-white text-slate-600 shadow-sm"
-                      }`}
-                    >
+                    <span className="inline-flex items-center rounded-full bg-surface-overlay px-4 py-1.5 text-xs font-bold uppercase tracking-widest text-ink-secondary shadow-card">
                       In Progress
                     </span>
                   </div>
@@ -823,13 +703,7 @@ export default function App() {
 
               {/* Review Notes */}
               <div className="mt-6">
-                <label
-                  className={`mb-2 block text-sm font-semibold ${
-                    isDark ? "text-slate-300" : "text-slate-700"
-                  }`}
-                >
-                  Review Notes
-                </label>
+                <label className="mb-2 block text-sm font-semibold text-ink-secondary">Review Notes</label>
                 <textarea
                   value={previewSession.notes || ""}
                   onChange={(e) =>
@@ -841,16 +715,12 @@ export default function App() {
                   }
                   placeholder="Add your review notes here..."
                   rows={4}
-                  className={`w-full resize-none rounded-xl border px-4 py-3 text-sm outline-none transition-colors ${
-                    isDark
-                      ? "border-zinc-700 bg-[#1F1F23] text-slate-100 placeholder:text-zinc-500 focus:border-[#A8C3A4]"
-                      : "border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 focus:border-[#A8C3A4]"
-                  }`}
+                  className="w-full resize-none rounded-panel border border-border bg-surface-sunken px-4 py-3 text-sm text-ink-primary placeholder:text-ink-muted outline-none transition-colors focus:border-accent-primary"
                 />
               </div>
             </div>
           </div>
-        </div>
+        </Modal>
       )}
     </div>
   );
