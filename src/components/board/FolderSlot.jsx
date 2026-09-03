@@ -1,5 +1,5 @@
-import { useState } from "react";
 import { getTransformStyle, getClipStyle } from "./constants.js";
+import InlineRenameField from "../ui/InlineRenameField.jsx";
 
 // One folder's slot on the Reference Board: shows its current active
 // image (or a "+" placeholder when empty), a lock toggle that keeps
@@ -33,7 +33,6 @@ import { getTransformStyle, getClipStyle } from "./constants.js";
 // nothing about the board can change. Opening Focus Mode to view/zoom the
 // picture still works, since that's viewing, not altering anything here.
 export default function FolderSlot({
-  isDark,
   folder,
   activeReference,
   locked,
@@ -56,19 +55,14 @@ export default function FolderSlot({
   isDropTarget,
 }) {
   const isEmpty = !activeReference;
-  const [isEditingName, setIsEditingName] = useState(false);
-  const [tempName, setTempName] = useState(folder.name);
 
-  const startEditingName = () => {
-    setTempName(folder.name);
-    setIsEditingName(true);
-  };
-
-  const saveName = () => {
-    const finalName = tempName.trim();
-    if (finalName && finalName !== folder.name) onRenameFolder?.(finalName);
-    setIsEditingName(false);
-  };
+  const borderClass = isRearranging
+    ? "touch-none border-dashed border-border"
+    : isDropTarget
+      ? "border-dashed border-accent-primary"
+      : locked && !isEmpty
+        ? "border-accent-primary"
+        : "border-border";
 
   return (
     <div className="group relative" data-folder-card>
@@ -80,35 +74,15 @@ export default function FolderSlot({
         onPointerCancel={isRearranging ? onDragPointerUp : undefined}
         onDragOver={!isRearranging && !isFocusLocked ? (e) => e.preventDefault() : undefined}
         onDrop={!isRearranging && !isFocusLocked ? onPhotoDrop : undefined}
-        className={`relative aspect-square w-full overflow-hidden rounded-2xl border-2 transition-colors ${
-          isRearranging
-            ? `touch-none ${isDragging ? "cursor-grabbing" : "cursor-grab"} ${
-                isDark ? "border-dashed border-zinc-600" : "border-dashed border-slate-400"
-              }`
-            : isDropTarget
-              ? "border-dashed border-[#A8C3A4]"
-              : locked && !isEmpty
-                ? "border-[#A8C3A4]"
-                : isDark
-                  ? "border-zinc-800"
-                  : "border-slate-200"
-        } ${isDark ? "bg-[#242428]" : "bg-slate-100"} ${isDragging ? "opacity-60" : ""}`}
+        className={`relative aspect-square w-full overflow-hidden rounded-panel border-2 bg-surface-sunken transition-colors ${borderClass} ${
+          isRearranging ? (isDragging ? "cursor-grabbing" : "cursor-grab") : ""
+        } ${isDragging ? "opacity-60" : ""}`}
       >
         {isFocusLocked ? (
           isEmpty ? (
-            <div
-              className={`flex h-full w-full items-center justify-center text-2xl font-light ${
-                isDark ? "text-zinc-600" : "text-slate-400"
-              }`}
-            >
-              +
-            </div>
+            <div className="flex h-full w-full items-center justify-center text-2xl font-light text-ink-muted">+</div>
           ) : (
-            <button
-              onClick={onOpenFocus}
-              className="block h-full w-full"
-              title={`Browse ${folder.name}`}
-            >
+            <button onClick={onOpenFocus} className="block h-full w-full" title={`Browse ${folder.name}`}>
               <div className="h-full w-full" style={{ clipPath: getClipStyle(transform?.crop) }}>
                 <img
                   src={activeReference.src}
@@ -122,13 +96,7 @@ export default function FolderSlot({
           )
         ) : isRearranging ? (
           isEmpty ? (
-            <div
-              className={`flex h-full w-full items-center justify-center text-2xl font-light ${
-                isDark ? "text-zinc-600" : "text-slate-400"
-              }`}
-            >
-              +
-            </div>
+            <div className="flex h-full w-full items-center justify-center text-2xl font-light text-ink-muted">+</div>
           ) : (
             <div className="h-full w-full" style={{ clipPath: getClipStyle(transform?.crop) }}>
               <img
@@ -143,24 +111,15 @@ export default function FolderSlot({
         ) : isEmpty ? (
           <button
             onClick={onOpenUpload}
-            className={`flex h-full w-full flex-col items-center justify-center gap-1 transition-colors ${
-              isDark ? "text-zinc-500 hover:text-zinc-300" : "text-slate-400 hover:text-slate-600"
-            }`}
+            className="flex h-full w-full flex-col items-center justify-center gap-1 text-ink-muted transition-colors hover:text-accent-primary"
             title={`Add references to ${folder.name}`}
           >
             <span className="text-2xl font-light leading-none">+</span>
           </button>
         ) : (
           <>
-            <button
-              onClick={onOpenFocus}
-              className="block h-full w-full"
-              title={`Browse ${folder.name}`}
-            >
-              <div
-                className="h-full w-full"
-                style={{ clipPath: getClipStyle(transform?.crop) }}
-              >
+            <button onClick={onOpenFocus} className="block h-full w-full" title={`Browse ${folder.name}`}>
+              <div className="h-full w-full" style={{ clipPath: getClipStyle(transform?.crop) }}>
                 <img
                   src={activeReference.src}
                   alt={folder.name}
@@ -182,9 +141,10 @@ export default function FolderSlot({
             <button
               onClick={onToggleLock}
               title={locked ? "Unlock (Shuffle will re-roll this)" : "Lock (Shuffle will skip this)"}
+              aria-label={locked ? "Unlock this reference" : "Lock this reference"}
               className={`absolute left-2 top-2 flex h-9 w-9 items-center justify-center rounded-full text-sm shadow-md transition-colors ${
                 locked
-                  ? "bg-[#A8C3A4] text-black"
+                  ? "bg-accent-primary text-accent-primary-ink"
                   : "bg-black/40 text-white opacity-0 backdrop-blur-sm group-hover:opacity-100 focus-visible:opacity-100"
               }`}
             >
@@ -203,6 +163,7 @@ export default function FolderSlot({
             <button
               onClick={onOpenUpload}
               title={`Add more to ${folder.name}`}
+              aria-label={`Add more to ${folder.name}`}
               className="absolute bottom-2 right-2 flex h-9 w-9 items-center justify-center rounded-full bg-black/40 text-base text-white opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
             >
               +
@@ -214,6 +175,7 @@ export default function FolderSlot({
             <button
               onClick={onClearSlot}
               title="Clear this picture (keeps it in Add References)"
+              aria-label="Clear this picture"
               className="absolute right-2 top-2 flex h-9 w-9 items-center justify-center rounded-full bg-black/40 text-sm text-white opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
             >
               ✕
@@ -233,7 +195,8 @@ export default function FolderSlot({
           <button
             onClick={onDetachFolder}
             title={`Remove "${folder.name}" from this board (keeps it in Add References)`}
-            className="absolute right-2 top-2 flex h-9 w-9 items-center justify-center rounded-full bg-black/40 text-sm text-white backdrop-blur-sm transition-opacity opacity-100 focus-visible:opacity-100"
+            aria-label={`Remove ${folder.name} from this board`}
+            className="absolute right-2 top-2 flex h-9 w-9 items-center justify-center rounded-full bg-black/40 text-sm text-white opacity-100 backdrop-blur-sm transition-opacity focus-visible:opacity-100"
           >
             ✕
           </button>
@@ -241,33 +204,15 @@ export default function FolderSlot({
       </div>
 
       <div className="mt-2 px-0.5">
-        {isEditingName ? (
-          <input
-            type="text"
-            value={tempName}
-            onChange={(e) => setTempName(e.target.value)}
-            autoFocus
-            onFocus={(e) => e.target.select()}
-            onBlur={saveName}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") saveName();
-              if (e.key === "Escape") setIsEditingName(false);
-            }}
-            style={{ width: `${Math.max(tempName.length, 1) + 1}ch` }}
-            className={`max-w-full rounded bg-blue-500/10 text-sm font-semibold outline-none focus:ring-1 focus:ring-blue-500/50 ${
-              isDark ? "text-slate-200" : "text-slate-700"
-            }`}
+        {!isRearranging && !isFocusLocked ? (
+          <InlineRenameField
+            value={folder.name}
+            onSave={onRenameFolder}
+            className="text-sm font-semibold text-ink-secondary"
+            inputClassName="bg-accent-primary-soft text-sm font-semibold text-ink-primary"
           />
         ) : (
-          <span
-            onClick={!isRearranging && !isFocusLocked ? startEditingName : undefined}
-            title={!isRearranging && !isFocusLocked ? "Click to rename" : undefined}
-            className={`block max-w-full truncate text-sm font-semibold ${
-              !isRearranging && !isFocusLocked ? "cursor-pointer" : ""
-            } ${isDark ? "text-slate-200" : "text-slate-700"}`}
-          >
-            {folder.name}
-          </span>
+          <span className="block max-w-full truncate text-sm font-semibold text-ink-secondary">{folder.name}</span>
         )}
       </div>
     </div>

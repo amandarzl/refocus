@@ -29,7 +29,7 @@ export default function InlineRenameField({
         onFocus={(e) => e.target.select()}
         placeholder={placeholder}
         style={{ width: `${Math.max(draft.length, 1) + 1}ch` }}
-        className={`rounded bg-accent-primary-soft font-semibold text-ink-primary outline-none focus:ring-1 focus:ring-focus-ring ${inputClassName || className}`}
+        className={`rounded outline-none focus:ring-1 focus:ring-focus-ring ${inputClassName || className}`}
       />
     );
   }

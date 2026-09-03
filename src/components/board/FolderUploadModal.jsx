@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { filesToReferences } from "../../utils/imageProcessor";
 import { normalizeTag } from "./TagEditor";
+import { Z } from "../ui/zIndex.js";
 
 // Adds images to one folder's persistent library. Combines the old
 // canvas uploader's drag/drop + clipboard-paste + Pinterest/URL fetch
@@ -8,7 +9,6 @@ import { normalizeTag } from "./TagEditor";
 // storage, since folder images are a long-lived library, not scattered
 // canvas objects with revocable blob URLs.
 export default function FolderUploadModal({
-  isDark,
   folder,
   onClose,
   onAddReferences,
@@ -216,22 +216,21 @@ export default function FolderUploadModal({
   return (
     <>
       <div
-        className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm"
+        className="fixed inset-0 bg-black/60 backdrop-blur-sm"
+        style={{ zIndex: Z.modal }}
         onClick={onClose}
         aria-hidden="true"
       />
-      <div className="fixed inset-0 z-[71] flex items-center justify-center p-4">
+      <div className="fixed inset-0 flex items-center justify-center p-4" style={{ zIndex: Z.modal + 1 }}>
         <div
           onClick={(e) => e.stopPropagation()}
           onPaste={handlePaste}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
-          className={`w-full max-w-md rounded-2xl border p-6 shadow-2xl ${
-            isDark
-              ? "border-zinc-800 bg-[#1F1F23] text-slate-100"
-              : "border-slate-200 bg-white text-slate-900"
-          } ${isShaking ? "animate-shake" : ""}`}
+          className={`w-full max-w-md rounded-panel border border-border bg-surface-overlay p-6 text-ink-primary shadow-2xl ${
+            isShaking ? "animate-shake" : ""
+          }`}
           role="dialog"
           aria-label={`Add references to ${folder.name}`}
           tabIndex={0}
@@ -240,12 +239,9 @@ export default function FolderUploadModal({
             <h3 className="text-lg font-bold">Add to "{folder.name}"</h3>
             <button
               onClick={onClose}
-              className={`rounded-lg p-1 transition-colors ${
-                isDark
-                  ? "text-slate-400 hover:bg-zinc-800 hover:text-slate-200"
-                  : "text-slate-500 hover:bg-slate-100 hover:text-slate-700"
-              }`}
+              className="rounded-control p-1 text-ink-secondary transition-colors hover:bg-surface-sunken hover:text-ink-primary"
               title="Close"
+              aria-label="Close"
             >
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -254,9 +250,7 @@ export default function FolderUploadModal({
           </div>
 
           {/* Tags */}
-          <label className={`mt-4 block text-xs font-semibold uppercase tracking-wider ${
-            isDark ? "text-slate-500" : "text-slate-400"
-          }`}>
+          <label className="mt-4 block text-xs font-semibold uppercase tracking-wider text-ink-muted">
             {onPick && existingReferences?.length > 0
               ? "Tags — filters photos below, tags anything new you add"
               : "Tags (optional, applies to this batch)"}
@@ -266,11 +260,7 @@ export default function FolderUploadModal({
             value={tagsInput}
             onChange={(e) => setTagsInput(e.target.value)}
             placeholder="#pose #anatomy #lighting"
-            className={`mt-2 w-full rounded-lg border px-3 py-2 text-sm outline-none transition-colors ${
-              isDark
-                ? "border-zinc-700 bg-[#1A1A1E] text-slate-100 placeholder:text-zinc-600 focus:border-[#A8C3A4]"
-                : "border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 focus:border-[#A8C3A4]"
-            }`}
+            className="mt-2 w-full rounded-control border border-border bg-surface-canvas px-3 py-2 text-sm text-ink-primary placeholder:text-ink-muted outline-none transition-colors focus:border-accent-primary"
           />
 
           {/* Pick from this folder's existing archive — only offered where
@@ -280,17 +270,11 @@ export default function FolderUploadModal({
           {onPick && existingReferences?.length > 0 && (
             <>
               <div className="mt-4 flex items-center gap-3">
-                <span className={`text-xs font-medium uppercase tracking-wider ${
-                  isDark ? "text-slate-500" : "text-slate-400"
-                }`}>
-                  Or pick from this folder
-                </span>
-                <div className={`h-px flex-1 ${isDark ? "bg-zinc-800" : "bg-slate-200"}`} />
+                <span className="text-xs font-medium uppercase tracking-wider text-ink-muted">Or pick from this folder</span>
+                <div className="h-px flex-1 bg-border" />
               </div>
               {visibleExisting.length === 0 ? (
-                <p className={`mt-2 text-xs ${isDark ? "text-slate-500" : "text-slate-400"}`}>
-                  No photos match those tags.
-                </p>
+                <p className="mt-2 text-xs text-ink-muted">No photos match those tags.</p>
               ) : (
                 <div className="mt-2 grid max-h-40 grid-cols-4 gap-2 overflow-y-auto">
                   {visibleExisting.map((ref) => (
@@ -301,9 +285,7 @@ export default function FolderUploadModal({
                         onClose();
                       }}
                       title="Use this picture"
-                      className={`aspect-square overflow-hidden rounded-lg border transition-colors ${
-                        isDark ? "border-zinc-700 hover:border-[#A8C3A4]" : "border-slate-200 hover:border-[#A8C3A4]"
-                      }`}
+                      className="aspect-square overflow-hidden rounded-control border border-border transition-colors hover:border-accent-primary"
                     >
                       <img src={ref.src} alt="" className="h-full w-full object-cover" />
                     </button>
@@ -316,23 +298,17 @@ export default function FolderUploadModal({
           {/* Dropzone */}
           <div
             onClick={() => fileInputRef.current?.click()}
-            className={`mt-4 flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed px-4 py-8 text-center transition-colors ${
-              isDragging
-                ? "border-[#A8C3A4] bg-[#A8C3A4]/10"
-                : isDark
-                  ? "border-zinc-700 bg-[#1A1A1E] hover:border-[#A8C3A4]"
-                  : "border-slate-300 bg-slate-50 hover:border-[#A8C3A4]"
+            className={`mt-4 flex cursor-pointer flex-col items-center justify-center rounded-panel border-2 border-dashed px-4 py-8 text-center transition-colors ${
+              isDragging ? "border-accent-primary bg-accent-primary-soft" : "border-border bg-surface-canvas hover:border-accent-primary"
             }`}
           >
-            <svg className={`h-8 w-8 ${isDark ? "text-slate-500" : "text-slate-400"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <svg className="h-8 w-8 text-ink-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
             </svg>
-            <p className={`mt-2 text-sm font-semibold ${isDark ? "text-slate-200" : "text-slate-700"}`}>
+            <p className="mt-2 text-sm font-semibold text-ink-secondary">
               {isBusy ? "Processing…" : "Click to browse or drag & drop"}
             </p>
-            <p className={`mt-1 text-xs ${isDark ? "text-slate-500" : "text-slate-400"}`}>
-              Multiple images, a Pinterest link, or paste from clipboard
-            </p>
+            <p className="mt-1 text-xs text-ink-muted">Multiple images, a Pinterest link, or paste from clipboard</p>
           </div>
 
           <input
@@ -349,13 +325,9 @@ export default function FolderUploadModal({
 
           {/* Divider */}
           <div className="my-4 flex items-center gap-3">
-            <div className={`h-px flex-1 ${isDark ? "bg-zinc-800" : "bg-slate-200"}`} />
-            <span className={`text-xs font-medium uppercase tracking-wider ${
-              isDark ? "text-slate-500" : "text-slate-400"
-            }`}>
-              or paste URL
-            </span>
-            <div className={`h-px flex-1 ${isDark ? "bg-zinc-800" : "bg-slate-200"}`} />
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-xs font-medium uppercase tracking-wider text-ink-muted">or paste URL</span>
+            <div className="h-px flex-1 bg-border" />
           </div>
 
           <form onSubmit={handleUrlSubmit} className="flex gap-2">
@@ -364,29 +336,23 @@ export default function FolderUploadModal({
               value={urlInput}
               onChange={(e) => setUrlInput(e.target.value)}
               placeholder="https://... or a Pinterest pin"
-              className={`w-full rounded-lg border px-3 py-2 text-sm outline-none transition-colors ${
-                isDark
-                  ? "border-zinc-700 bg-[#1A1A1E] text-slate-100 placeholder:text-slate-600 focus:border-[#A8C3A4]"
-                  : "border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 focus:border-[#A8C3A4]"
-              }`}
+              className="w-full rounded-control border border-border bg-surface-canvas px-3 py-2 text-sm text-ink-primary placeholder:text-ink-muted outline-none transition-colors focus:border-accent-primary"
               aria-label="Image URL"
             />
             <button
               type="submit"
               disabled={!urlInput.trim() || isBusy}
-              className={`rounded-lg px-3 py-2 text-sm font-bold transition-colors ${
+              className={`rounded-control px-3 py-2 text-sm font-bold transition-colors ${
                 !urlInput.trim() || isBusy
                   ? "cursor-not-allowed opacity-40"
-                  : "bg-[#A8C3A4] text-black hover:bg-[#97b593]"
+                  : "bg-accent-primary text-accent-primary-ink hover:bg-accent-primary-hover"
               }`}
             >
               Add
             </button>
           </form>
 
-          {error && (
-            <p className="mt-3 text-xs font-medium text-[#E5989B]">{error}</p>
-          )}
+          {error && <p className="mt-3 text-xs font-medium text-danger">{error}</p>}
         </div>
       </div>
     </>

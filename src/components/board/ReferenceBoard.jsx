@@ -8,6 +8,8 @@ import FocusMode from "./FocusMode.jsx";
 import FolderUploadModal from "./FolderUploadModal.jsx";
 import BreakBanner from "./BreakBanner.jsx";
 import PaletteSection from "./PaletteSection.jsx";
+import Button from "../ui/Button.jsx";
+import Popover from "../ui/Popover.jsx";
 import {
   TIMER_DURATIONS,
   TIMER_DURATION_DEFAULT,
@@ -20,7 +22,6 @@ import {
 // active pick. Shuffle re-rolls every unlocked slot at once; locked
 // slots sit out.
 export default function ReferenceBoard({
-  isDark,
   boardSlots,
   boardOrder,
   onSlotsChange,
@@ -572,7 +573,6 @@ export default function ReferenceBoard({
     <div className="mx-auto max-w-7xl px-6 py-8" onClick={handleBoardBackgroundClick}>
       {focusFolder ? (
         <FocusMode
-          isDark={isDark}
           images={refsByFolder.get(focusFolder.id) || []}
           index={focusIndex}
           activeId={focusSlot.activeReferenceId}
@@ -604,55 +604,42 @@ export default function ReferenceBoard({
               some way (add, shuffle, rearrange, generate palette). */}
           <div className="flex flex-wrap items-center gap-3">
             {isBoardLocked ? (
-              <button
+              <Button
+                variant="primary"
+                icon
+                label="Unlock board"
                 onClick={() => onToggleBoardLocked(false)}
+                className="ml-auto"
                 title="Unlock — bring back the board's controls"
-                aria-label="Unlock board"
-                className="ml-auto flex h-9 w-9 items-center justify-center rounded-lg bg-[#A8C3A4] text-black transition-colors"
               >
                 <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                   <rect x="5" y="11" width="14" height="10" rx="2" />
                   <path d="M8 11V7a4 4 0 118 0" />
                 </svg>
-              </button>
+              </Button>
             ) : (
               <>
                 <div className="relative ml-auto">
-                  <button
+                  <Button
+                    variant={isAddFolderMenuOpen ? "primary" : "secondary"}
+                    icon
+                    label="Add a folder to this board"
                     onClick={() => setIsAddFolderMenuOpen((v) => !v)}
-                    title="Add a folder to this board"
-                    aria-label="Add a folder to this board"
-                    className={`flex h-9 w-9 items-center justify-center rounded-lg transition-colors ${
-                      isAddFolderMenuOpen
-                        ? "bg-[#A8C3A4] text-black"
-                        : isDark
-                          ? "bg-zinc-800 text-slate-200 hover:bg-zinc-700"
-                          : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                    }`}
                   >
                     <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                       <line x1="12" y1="5" x2="12" y2="19" />
                       <line x1="5" y1="12" x2="19" y2="12" />
                     </svg>
-                  </button>
-                  {isAddFolderMenuOpen && (
-                    <AddFolderMenu
-                      isDark={isDark}
-                      existingFolders={attachableFolders}
-                      onCreateFolders={handleCreateFolders}
-                      onAttachFolder={handleAttachFolder}
-                      onClose={() => setIsAddFolderMenuOpen(false)}
-                    />
-                  )}
+                  </Button>
+                  <AddFolderMenu
+                    isOpen={isAddFolderMenuOpen}
+                    existingFolders={attachableFolders}
+                    onCreateFolders={handleCreateFolders}
+                    onAttachFolder={handleAttachFolder}
+                    onClose={() => setIsAddFolderMenuOpen(false)}
+                  />
                 </div>
-                <button
-                  onClick={handleShuffle}
-                  title="Shuffle"
-                  aria-label="Shuffle"
-                  className={`flex h-9 w-9 items-center justify-center rounded-lg transition-colors ${
-                    isDark ? "bg-zinc-800 text-slate-200 hover:bg-zinc-700" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                  }`}
-                >
+                <Button variant="secondary" icon label="Shuffle" onClick={handleShuffle}>
                   <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="16 3 21 3 21 8" />
                     <line x1="4" y1="20" x2="21" y2="3" />
@@ -660,53 +647,39 @@ export default function ReferenceBoard({
                     <line x1="15" y1="15" x2="21" y2="21" />
                     <line x1="4" y1="4" x2="9" y2="9" />
                   </svg>
-                </button>
-                <button
+                </Button>
+                <Button
+                  variant="secondary"
+                  icon
+                  label="Focus Lock — hide controls and freeze the pictures"
                   onClick={() => onToggleBoardLocked(true)}
-                  title="Focus Lock — hide controls and freeze the pictures"
-                  aria-label="Focus Lock"
-                  className={`flex h-9 w-9 items-center justify-center rounded-lg transition-colors ${
-                    isDark ? "bg-zinc-800 text-slate-200 hover:bg-zinc-700" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                  }`}
                 >
                   <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                     <rect x="5" y="11" width="14" height="10" rx="2" />
                     <path d="M8 11V7a4 4 0 018 0v4" />
                   </svg>
-                </button>
+                </Button>
                 <div className="relative">
-                  <button
+                  <Button
+                    variant={isToolbarMenuOpen ? "primary" : "secondary"}
+                    icon
+                    label="More board actions"
                     onClick={() => setIsToolbarMenuOpen((v) => !v)}
-                    title="More board actions"
-                    aria-label="More board actions"
-                    className={`flex h-9 w-9 items-center justify-center rounded-lg transition-colors ${
-                      isToolbarMenuOpen
-                        ? "bg-[#A8C3A4] text-black"
-                        : isDark
-                          ? "bg-zinc-800 text-slate-200 hover:bg-zinc-700"
-                          : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                    }`}
                   >
                     <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                       <line x1="3" y1="6" x2="21" y2="6" />
                       <line x1="3" y1="12" x2="21" y2="12" />
                       <line x1="3" y1="18" x2="21" y2="18" />
                     </svg>
-                  </button>
-                  {isToolbarMenuOpen && (
-                    <div
-                      className={`absolute right-0 top-full z-50 mt-2 w-48 overflow-hidden rounded-xl border shadow-2xl ${
-                        isDark ? "border-zinc-700 bg-[#242428]" : "border-slate-200 bg-white"
-                      }`}
-                    >
+                  </Button>
+                  <Popover isOpen={isToolbarMenuOpen} onClose={() => setIsToolbarMenuOpen(false)} width="w-48">
+                    <div className="p-1">
                       <button
                         onClick={() => {
                           setIsRearranging((v) => !v);
                           setIsToolbarMenuOpen(false);
                         }}
-                        className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-semibold transition-colors ${
-                          isDark ? "text-slate-200 hover:bg-zinc-800" : "text-slate-700 hover:bg-slate-100"
-                        }`}
+                        className="flex w-full items-center gap-2 rounded-control px-3 py-2 text-left text-sm font-semibold text-ink-secondary transition-colors hover:bg-surface-sunken hover:text-ink-primary"
                       >
                         {isRearranging ? "Done rearranging" : "Rearrange folders"}
                       </button>
@@ -715,28 +688,24 @@ export default function ReferenceBoard({
                           handleGeneratePaletteForBoard();
                           setIsToolbarMenuOpen(false);
                         }}
-                        className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-semibold transition-colors ${
-                          isDark ? "text-slate-200 hover:bg-zinc-800" : "text-slate-700 hover:bg-slate-100"
-                        }`}
+                        className="flex w-full items-center gap-2 rounded-control px-3 py-2 text-left text-sm font-semibold text-ink-secondary transition-colors hover:bg-surface-sunken hover:text-ink-primary"
                       >
                         Generate Palette
                       </button>
                     </div>
-                  )}
+                  </Popover>
                 </div>
               </>
             )}
           </div>
 
           {!isBoardLocked && (
-            <label className={`mt-3 flex w-fit items-center gap-2 text-xs font-medium ${
-              isDark ? "text-slate-300" : "text-slate-600"
-            }`}>
+            <label className="mt-3 flex w-fit items-center gap-2 text-xs font-medium text-ink-secondary">
               <input
                 type="checkbox"
                 checked={timerEnabled}
                 onChange={(e) => handleToggleTimer(e.target.checked)}
-                className="h-3.5 w-3.5 cursor-pointer accent-[#A8C3A4]"
+                className="h-3.5 w-3.5 cursor-pointer accent-accent-primary"
               />
               Session timer
               {timerEnabled && (
@@ -744,17 +713,13 @@ export default function ReferenceBoard({
                   <select
                     value={timerDuration}
                     onChange={(e) => handleTimerDurationChange(Number(e.target.value))}
-                    className={`rounded-md border px-1.5 py-0.5 text-xs ${
-                      isDark ? "border-zinc-700 bg-zinc-800 text-slate-200" : "border-slate-300 bg-white text-slate-700"
-                    }`}
+                    className="rounded-control border border-border bg-surface-raised px-1.5 py-0.5 text-xs text-ink-secondary"
                   >
                     {TIMER_DURATIONS.map((min) => (
                       <option key={min} value={min}>{min} min</option>
                     ))}
                   </select>
-                  <span className={`font-mono tabular-nums ${isDark ? "text-[#A8C3A4]" : "text-[#5c7658]"}`}>
-                    {timeRemaining}
-                  </span>
+                  <span className="font-mono tabular-nums text-accent-primary">{timeRemaining}</span>
                 </>
               )}
             </label>
@@ -768,7 +733,6 @@ export default function ReferenceBoard({
                 <FolderSlot
                   key={folder.id}
                   cardRef={(el) => (cardRefs.current[folder.id] = el)}
-                  isDark={isDark}
                   folder={folder}
                   activeReference={refById.get(slot.activeReferenceId) || null}
                   locked={slot.locked}
@@ -796,7 +760,7 @@ export default function ReferenceBoard({
           {/* Palette */}
           {paletteEntries.length > 0 && (
             <div className="mt-8">
-              <PaletteSection isDark={isDark} entries={paletteEntries} onRemove={handleRemovePalette} />
+              <PaletteSection entries={paletteEntries} onRemove={handleRemovePalette} />
             </div>
           )}
         </>
@@ -804,7 +768,6 @@ export default function ReferenceBoard({
 
       {uploadFolder && (
         <FolderUploadModal
-          isDark={isDark}
           folder={uploadFolder}
           onClose={() => setUploadFolderId(null)}
           onAddReferences={handleAddReferences}
@@ -815,7 +778,6 @@ export default function ReferenceBoard({
 
       {showBreak && !isBoardLocked && (
         <BreakBanner
-          isDark={isDark}
           onSnooze={() => {
             setSecondsLeft(5 * 60);
             setShowBreak(false);

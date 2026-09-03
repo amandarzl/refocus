@@ -118,8 +118,6 @@ export default function App() {
   // restored with the drawing, reset on a brand-new one.
   const [boardOrder, setBoardOrder] = useState([]);
 
-  const isDark = theme === "dark";
-
   // The color tokens in index.css are keyed on `:root[data-theme]` — `:root`
   // is always the <html> element in CSS, never this component's own div, so
   // the attribute has to live there for the tokens to actually switch. (The
@@ -608,7 +606,6 @@ export default function App() {
         </main>
       ) : viewMode === "library" ? (
         <ReferenceLibrary
-          isDark={isDark}
           boardSlots={boardSlots}
           onSlotsChange={setBoardSlots}
         />
@@ -616,7 +613,6 @@ export default function App() {
         /* Workspace View: the Reference Board */
         <div className="flex-1 overflow-y-auto">
           <ReferenceBoard
-            isDark={isDark}
             boardSlots={boardSlots}
             boardOrder={boardOrder}
             onSlotsChange={setBoardSlots}
@@ -630,7 +626,6 @@ export default function App() {
       {/* Template Selector Modal */}
       {isTemplateModalOpen && (
         <TemplateModal
-          isDark={isDark}
           templates={TEMPLATES}
           onClose={() => setIsTemplateModalOpen(false)}
           onSelect={handleSelectTemplate}
@@ -640,7 +635,6 @@ export default function App() {
       {/* Finish Drawing Review Modal */}
       {isFinishModalOpen && (
         <FinishModal
-          isDark={isDark}
           title={canvasTitle}
           session={currentSession}
           onClose={() => setIsFinishModalOpen(false)}

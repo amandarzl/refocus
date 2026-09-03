@@ -161,7 +161,7 @@ export default function Header({
                 onSave={onTitleChange}
                 fallback="Untitled Canvas"
                 className="max-w-[120px] text-sm font-semibold text-ink-primary sm:max-w-[200px]"
-                inputClassName="text-sm text-ink-primary"
+                inputClassName="bg-accent-primary-soft text-sm font-semibold text-ink-primary"
               />
             </div>
           )}

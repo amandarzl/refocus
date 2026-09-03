@@ -11,6 +11,7 @@ export default function Popover({
   isOpen,
   onClose,
   align = "right",
+  placement = "bottom",
   width = "w-56",
   children,
 }) {
@@ -26,7 +27,9 @@ export default function Popover({
       onKeyDown={(e) => {
         if (e.key === "Escape") onClose?.();
       }}
-      className={`absolute top-full mt-2 ${align === "right" ? "right-0" : "left-0"} ${width} overflow-hidden rounded-panel border border-border bg-surface-overlay text-ink-primary shadow-2xl`}
+      className={`absolute ${placement === "top" ? "bottom-full mb-2" : "top-full mt-2"} ${
+        align === "right" ? "right-0" : "left-0"
+      } ${width} overflow-hidden rounded-panel border border-border bg-surface-overlay text-ink-primary shadow-2xl`}
       style={{ zIndex: Z.dropdown }}
     >
       {children}
