@@ -108,7 +108,7 @@ export default function FolderList({
                   <span>
                     {count} photo{count === 1 ? "" : "s"}
                   </span>
-                  <span aria-hidden="true">→</span>
+                  <span aria-hidden="true" className="text-sm opacity-100">→</span>
                 </span>
               </div>
 
