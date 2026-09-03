@@ -1,4 +1,5 @@
 import { useState } from "react";
+import EmptyTile from "../ui/EmptyTile.jsx";
 
 // Trailing tile in the slot row. Two ways to add a card:
 // - "New folder" creates a brand-new folder and attaches it immediately.
@@ -6,10 +7,10 @@ import { useState } from "react";
 //   References library (created there, or previously detached) — folders
 //   never sync onto the board on their own, this is always an explicit pick.
 export default function AddFolderControl({
-  isDark,
   existingFolders = [],
   onCreateFolder,
   onAttachFolder,
+  tileSize = "tile",
 }) {
   const [mode, setMode] = useState(null); // null | "create" | "pick"
   const [name, setName] = useState("");
@@ -21,15 +22,9 @@ export default function AddFolderControl({
     setMode(null);
   };
 
-  const tileClass = `flex aspect-square w-full flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed transition-colors ${
-    isDark
-      ? "border-zinc-700 text-zinc-500 hover:border-[#A8C3A4] hover:text-[#A8C3A4]"
-      : "border-slate-300 text-slate-400 hover:border-[#A8C3A4] hover:text-[#5c7658]"
-  }`;
-
   return (
     <div>
-      <div className={tileClass}>
+      <EmptyTile size={tileSize}>
         {mode === "create" ? (
           <input
             autoFocus
@@ -45,11 +40,7 @@ export default function AddFolderControl({
               }
             }}
             placeholder="Folder name"
-            className={`w-4/5 rounded-lg border px-2 py-1 text-center text-sm outline-none ${
-              isDark
-                ? "border-zinc-700 bg-[#1A1A1E] text-slate-100 placeholder:text-zinc-600"
-                : "border-slate-300 bg-white text-slate-900 placeholder:text-slate-400"
-            }`}
+            className="w-4/5 rounded-control border border-border bg-surface-canvas px-2 py-1 text-center text-sm text-ink-primary placeholder:text-ink-muted outline-none"
           />
         ) : mode === "pick" ? (
           <div className="flex h-full w-full flex-col gap-1 overflow-y-auto p-2 text-left">
@@ -63,18 +54,13 @@ export default function AddFolderControl({
                     onAttachFolder(f.id);
                     setMode(null);
                   }}
-                  className={`truncate rounded-lg px-2 py-1.5 text-left text-xs font-semibold transition-colors ${
-                    isDark ? "hover:bg-zinc-800 hover:text-[#A8C3A4]" : "hover:bg-slate-100 hover:text-[#5c7658]"
-                  }`}
+                  className="truncate rounded-control px-2 py-1.5 text-left text-xs font-semibold transition-colors hover:bg-surface-canvas hover:text-accent-primary"
                 >
                   {f.name}
                 </button>
               ))
             )}
-            <button
-              onClick={() => setMode(null)}
-              className={`mt-auto text-center text-[11px] underline ${isDark ? "text-zinc-500" : "text-slate-400"}`}
-            >
+            <button onClick={() => setMode(null)} className="mt-auto text-center text-[11px] text-ink-muted underline">
               Cancel
             </button>
           </div>
@@ -91,7 +77,7 @@ export default function AddFolderControl({
             )}
           </div>
         )}
-      </div>
+      </EmptyTile>
     </div>
   );
 }

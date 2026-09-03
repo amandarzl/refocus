@@ -1,13 +1,10 @@
 import { useRef, useState } from "react";
 import { compressImage, revokeObjectUrl } from "../utils/imageProcessor";
+import Modal from "./ui/Modal.jsx";
+import Button from "./ui/Button.jsx";
+import EmptyTile from "./ui/EmptyTile.jsx";
 
-export default function FinishModal({
-  isDark,
-  goal,
-  session,
-  onClose,
-  onSave,
-}) {
+export default function FinishModal({ goal, session, onClose, onSave }) {
   const [image, setImage] = useState(null);
   const [palette, setPalette] = useState([]);
   const [notes, setNotes] = useState("");
@@ -57,54 +54,24 @@ export default function FinishModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={onClose}
-      />
-
-      {/* Modal Container */}
-      <div
-        className={`relative w-full max-w-lg rounded-2xl border p-6 shadow-2xl sm:p-8 ${
-          isDark
-            ? "border-zinc-800 bg-[#1F1F23] text-slate-100"
-            : "border-slate-200 bg-white text-slate-900"
-        }`}
-      >
+    <Modal onClose={onClose} maxWidth="lg" labelledBy="finish-modal-title">
+      <div className="p-6 sm:p-8">
         {/* Header */}
         <div className="flex items-start justify-between">
           <div>
-            <h2 className="text-xl font-bold tracking-tight">Finish Drawing</h2>
-            <p
-              className={`mt-1 text-sm ${
-                isDark ? "text-slate-400" : "text-slate-500"
-              }`}
-            >
-              Review your work before saving to the vault.
-            </p>
+            <h2 id="finish-modal-title" className="text-xl font-bold tracking-tight text-ink-primary">
+              Finish Drawing
+            </h2>
+            <p className="mt-1 text-sm text-ink-secondary">Review your work before saving to the vault.</p>
           </div>
           <button
             onClick={onClose}
-            className={`rounded-lg p-2 transition-colors ${
-              isDark
-                ? "text-slate-400 hover:bg-zinc-800 hover:text-slate-200"
-                : "text-slate-500 hover:bg-slate-100 hover:text-slate-700"
-            }`}
+            className="rounded-control p-2 text-ink-secondary transition-colors hover:bg-surface-sunken hover:text-ink-primary"
             title="Close"
+            aria-label="Close"
           >
-            <svg
-              className="h-5 w-5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M6 18L18 6M6 6l12 12"
-              />
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
@@ -112,27 +79,15 @@ export default function FinishModal({
         <div className="mt-6 flex flex-col gap-5">
           {/* Goal badge */}
           <div className="flex items-center gap-2">
-            <span className="rounded-full bg-[#A8C3A4] px-3 py-1 text-xs font-bold text-[#1A1A1E]">
-              {goal}
-            </span>
+            <span className="rounded-full bg-accent-primary px-3 py-1 text-xs font-bold text-accent-primary-ink">{goal}</span>
           </div>
 
           {/* Drawing Snapshot Upload */}
           <div>
-            <label
-              className={`mb-2 block text-xs font-bold uppercase tracking-wider ${
-                isDark ? "text-slate-400" : "text-slate-500"
-              }`}
-            >
-              Drawing Snapshot
-            </label>
+            <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-ink-muted">Drawing Snapshot</label>
             {image ? (
-              <div className="relative overflow-hidden rounded-xl">
-                <img
-                  src={image}
-                  alt="Drawing snapshot preview"
-                  className="h-48 w-full object-cover"
-                />
+              <div className="relative overflow-hidden rounded-panel">
+                <img src={image} alt="Drawing snapshot preview" className="h-48 w-full object-cover" />
                 <button
                   onClick={() => {
                     if (image) revokeObjectUrl(image);
@@ -140,109 +95,53 @@ export default function FinishModal({
                     setPalette([]);
                     if (fileInputRef.current) fileInputRef.current.value = "";
                   }}
-                  className="absolute top-2 right-2 rounded-lg bg-black/60 p-1.5 text-white backdrop-blur-sm transition-colors hover:bg-black/80"
+                  className="absolute right-2 top-2 rounded-control bg-black/60 p-1.5 text-white backdrop-blur-sm transition-colors hover:bg-black/80"
                   title="Remove snapshot"
+                  aria-label="Remove snapshot"
                 >
-                  <svg
-                    className="h-4 w-4"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M6 18L18 6M6 6l12 12"
-                    />
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
               </div>
             ) : (
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className={`flex h-48 w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed transition-colors ${
-                  isDark
-                    ? "border-zinc-700 bg-[#252529] hover:border-zinc-500"
-                    : "border-slate-300 bg-slate-50 hover:border-slate-400"
-                }`}
-              >
-                <svg
-                  className={`h-8 w-8 ${
-                    isDark ? "text-slate-500" : "text-slate-400"
-                  }`}
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={1.5}
-                >
+              <EmptyTile size="wide" onClick={() => fileInputRef.current?.click()} className="!p-0 h-48">
+                <svg className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"
                   />
                 </svg>
-                <span
-                  className={`text-sm font-medium ${
-                    isDark ? "text-slate-400" : "text-slate-500"
-                  }`}
-                >
-                  Upload drawing snapshot
-                </span>
-              </button>
+                <span className="text-sm font-medium">Upload drawing snapshot</span>
+              </EmptyTile>
             )}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={handleFileChange}
-            />
+            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
           </div>
 
           {/* Review Notes */}
           <div>
-            <label
-              className={`mb-2 block text-xs font-bold uppercase tracking-wider ${
-                isDark ? "text-slate-400" : "text-slate-500"
-              }`}
-            >
-              Review Notes
-            </label>
+            <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-ink-muted">Review Notes</label>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows={3}
               placeholder="Add notes about this session..."
-              className={`w-full resize-none rounded-xl border px-4 py-3 text-sm outline-none transition-colors focus:border-[#A8C3A4] ${
-                isDark
-                  ? "border-zinc-700 bg-[#252529] text-slate-100 placeholder:text-slate-500"
-                  : "border-slate-300 bg-white text-slate-900 placeholder:text-slate-400"
-              }`}
+              className="w-full resize-none rounded-panel border border-border bg-surface-sunken px-4 py-3 text-sm text-ink-primary placeholder:text-ink-muted outline-none transition-colors focus:border-accent-primary"
             />
           </div>
 
           {/* Actions */}
           <div className="flex gap-3">
-            <button
-              onClick={onClose}
-              className={`flex-1 rounded-xl px-4 py-3 text-sm font-semibold transition-colors ${
-                isDark
-                  ? "text-slate-300 hover:bg-zinc-800"
-                  : "text-slate-600 hover:bg-slate-100"
-              }`}
-            >
+            <Button variant="ghost" onClick={onClose} className="flex-1 justify-center py-3">
               Cancel
-            </button>
-            <button
-              onClick={handleSave}
-              className="flex-1 rounded-xl bg-[#A8C3A4] px-4 py-3 text-sm font-bold text-black shadow-lg transition-colors hover:bg-[#97b593]"
-            >
+            </Button>
+            <Button variant="primary" onClick={handleSave} className="flex-1 justify-center py-3 shadow-card">
               Save to Vault & Return to Hub
-            </button>
+            </Button>
           </div>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

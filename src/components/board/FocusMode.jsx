@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import TagEditor from "./TagEditor";
+import Popover from "../ui/Popover.jsx";
 import { getTransformStyle, getClipStyle } from "./constants.js";
 
 const SWIPE_THRESHOLD = 50; // px
@@ -17,7 +18,6 @@ const MAX_ZOOM = 5;
 // the old free-form canvas, plus a Copy/Export/Generate Palette menu
 // available for any image being browsed.
 export default function FocusMode({
-  isDark,
   images,
   index,
   activeId,
@@ -185,36 +185,27 @@ export default function FocusMode({
   };
 
   const containerClass = isFullscreen
-    ? "fixed inset-0 z-[75] flex flex-col"
-    : "relative flex flex-col rounded-2xl border overflow-hidden";
-
-  const bg = isDark ? "bg-[#121215] text-slate-100" : "bg-slate-100 text-slate-900";
-  const borderCls = isDark ? "border-zinc-800" : "border-slate-200";
+    ? "fixed inset-0 z-[75] flex flex-col bg-surface-canvas text-ink-primary"
+    : "relative flex flex-col rounded-panel border border-border bg-surface-sunken text-ink-primary overflow-hidden";
 
   const toolbarBtn =
-    "flex h-8 w-8 items-center justify-center rounded-lg transition-colors " +
-    (isDark ? "text-slate-300 hover:bg-zinc-700" : "text-slate-600 hover:bg-slate-200");
+    "flex h-8 w-8 items-center justify-center rounded-control text-ink-secondary transition-colors hover:bg-surface-sunken hover:text-ink-primary";
 
   if (!current) return null;
 
   return (
-    <div
-      className={`${containerClass} ${isFullscreen ? bg : `${bg} ${borderCls}`}`}
-      style={isFullscreen ? undefined : { minHeight: "70vh" }}
-    >
+    <div className={containerClass} style={isFullscreen ? undefined : { minHeight: "70vh" }}>
       {/* Top bar */}
       <div className="flex items-center justify-between px-4 py-3">
         <div className="flex items-center gap-2">
-          <span className={`text-sm font-semibold ${isDark ? "text-slate-300" : "text-slate-600"}`}>
+          <span className="text-sm font-semibold text-ink-secondary">
             Image {index + 1} of {images.length}
           </span>
           {zoom > 1 && !isCropMode && (
             <button
               onClick={resetZoom}
               title="Reset zoom"
-              className={`rounded-full px-2 py-0.5 text-xs font-semibold transition-colors ${
-                isDark ? "bg-zinc-800 text-slate-300 hover:bg-zinc-700" : "bg-slate-200 text-slate-600 hover:bg-slate-300"
-              }`}
+              className="rounded-full bg-surface-raised px-2 py-0.5 text-xs font-semibold text-ink-secondary transition-colors hover:bg-surface-overlay"
             >
               {Math.round(zoom * 100)}% · Reset
             </button>
@@ -224,9 +215,8 @@ export default function FocusMode({
           <button
             onClick={() => setIsFullscreen((v) => !v)}
             title={isFullscreen ? "Exit full screen" : "Full screen"}
-            className={`flex h-9 w-9 items-center justify-center rounded-lg transition-colors ${
-              isDark ? "text-slate-300 hover:bg-zinc-800" : "text-slate-600 hover:bg-slate-200"
-            }`}
+            aria-label={isFullscreen ? "Exit full screen" : "Full screen"}
+            className="flex h-9 w-9 items-center justify-center rounded-control text-ink-secondary transition-colors hover:bg-surface-raised"
           >
             {isFullscreen ? (
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -241,9 +231,8 @@ export default function FocusMode({
           <button
             onClick={onExit}
             title="Close"
-            className={`flex h-9 w-9 items-center justify-center rounded-lg transition-colors ${
-              isDark ? "text-slate-300 hover:bg-zinc-800" : "text-slate-600 hover:bg-slate-200"
-            }`}
+            aria-label="Close"
+            className="flex h-9 w-9 items-center justify-center rounded-control text-ink-secondary transition-colors hover:bg-surface-raised"
           >
             ✕
           </button>
@@ -256,9 +245,7 @@ export default function FocusMode({
           <button
             onClick={goPrev}
             disabled={index === 0}
-            className={`absolute left-2 z-10 flex h-10 w-10 items-center justify-center rounded-full shadow-lg transition-opacity disabled:opacity-30 ${
-              isDark ? "bg-[#242428] text-slate-200" : "bg-white text-slate-700"
-            }`}
+            className="absolute left-2 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-surface-overlay text-ink-secondary shadow-lg transition-opacity disabled:opacity-30"
             aria-label="Previous image"
           >
             ‹
@@ -273,7 +260,7 @@ export default function FocusMode({
             onPointerCancel={handlePointerUp}
             onWheel={handleWheel}
             onDoubleClick={isCropMode ? undefined : resetZoom}
-            className="relative flex max-h-[55vh] max-w-full items-center justify-center overflow-hidden rounded-xl shadow-2xl"
+            className="relative flex max-h-[55vh] max-w-full items-center justify-center overflow-hidden rounded-panel shadow-2xl"
             style={{
               touchAction: "pan-y",
               cursor: isCropMode ? undefined : zoom > 1 ? (isPanning ? "grabbing" : "grab") : undefined,
@@ -314,7 +301,7 @@ export default function FocusMode({
                   }}
                 />
                 <div
-                  className="absolute border-2 border-[#A8C3A4]"
+                  className="absolute border-2 border-accent-primary"
                   style={{
                     left: `${cropRect.left * 100}%`,
                     top: `${cropRect.top * 100}%`,
@@ -326,7 +313,7 @@ export default function FocusMode({
                   {CROP_HANDLES.map((h) => (
                     <div
                       key={h}
-                      className="absolute h-3 w-3 rounded-sm bg-[#A8C3A4]"
+                      className="absolute h-3 w-3 rounded-sm bg-accent-primary"
                       style={{
                         left: h.includes("w") ? -6 : h.includes("e") ? "auto" : "50%",
                         right: h.includes("e") ? -6 : "auto",
@@ -345,7 +332,6 @@ export default function FocusMode({
 
           <TagEditor
             tags={current.tags || []}
-            isDark={isDark}
             size="md"
             onAddTag={(tag) => onAddTag(current.id, tag)}
             onRemoveTag={(tag) => onRemoveTag(current.id, tag)}
@@ -359,9 +345,7 @@ export default function FocusMode({
                   key={hex}
                   onClick={() => copyHex(hex)}
                   title={`Copy ${hex}`}
-                  className={`flex items-center gap-1.5 rounded-full border px-2 py-1 text-xs font-mono transition-colors ${
-                    isDark ? "border-zinc-700 bg-[#242428] text-slate-300 hover:border-[#A8C3A4]" : "border-slate-200 bg-white text-slate-600 hover:border-[#A8C3A4]"
-                  }`}
+                  className="flex items-center gap-1.5 rounded-full border border-border bg-surface-raised px-2 py-1 font-mono text-xs text-ink-secondary transition-colors hover:border-accent-primary"
                 >
                   <span className="h-4 w-4 rounded-full border border-black/10" style={{ backgroundColor: hex }} />
                   {copiedHex === hex ? "Copied!" : hex}
@@ -375,15 +359,13 @@ export default function FocusMode({
             <div className="flex items-center gap-2">
               <button
                 onClick={onApplyCrop}
-                className="rounded-lg bg-[#A8C3A4] px-4 py-2 text-sm font-bold text-black transition-colors hover:bg-[#97b593]"
+                className="rounded-control bg-accent-primary px-4 py-2 text-sm font-bold text-accent-primary-ink transition-colors hover:bg-accent-primary-hover"
               >
                 Apply
               </button>
               <button
                 onClick={onCancelCrop}
-                className={`rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
-                  isDark ? "text-slate-300 hover:bg-zinc-700" : "text-slate-600 hover:bg-slate-200"
-                }`}
+                className="rounded-control px-4 py-2 text-sm font-semibold text-ink-secondary transition-colors hover:bg-surface-raised"
               >
                 Cancel
               </button>
@@ -391,33 +373,34 @@ export default function FocusMode({
           ) : (
             <div className="flex items-center gap-2">
               {isCurrentActive && (
-                <div
-                  className={`flex items-center gap-1 rounded-xl border px-2 py-1 shadow-sm ${
-                    isDark ? "border-zinc-700 bg-[#242428]" : "border-slate-200 bg-white"
-                  }`}
-                >
-                  <button className={toolbarBtn} title="Crop" onClick={onStartCrop}>
+                <div className="flex items-center gap-1 rounded-panel border border-border bg-surface-raised px-2 py-1 shadow-card">
+                  <button className={toolbarBtn} title="Crop" aria-label="Crop" onClick={onStartCrop}>
                     <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M6 2v14a2 2 0 002 2h14M2 6h14a2 2 0 012 2v14" />
                     </svg>
                   </button>
-                  <button className={toolbarBtn} title="Mirror" onClick={onToggleMirror}>
+                  <button className={toolbarBtn} title="Mirror" aria-label="Mirror" onClick={onToggleMirror}>
                     <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v18M8 7l-4 4 4 4M16 7l4 4-4 4" />
                     </svg>
                   </button>
-                  <button className={toolbarBtn} title={transform.grayscale ? "Ungray" : "Gray"} onClick={onToggleGray}>
+                  <button
+                    className={toolbarBtn}
+                    title={transform.grayscale ? "Ungray" : "Gray"}
+                    aria-label={transform.grayscale ? "Remove grayscale" : "Apply grayscale"}
+                    onClick={onToggleGray}
+                  >
                     <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <circle cx="12" cy="12" r="9" />
                       <path strokeLinecap="round" d="M12 3a9 9 0 010 18" />
                     </svg>
                   </button>
-                  <button className={toolbarBtn} title="Rotate" onClick={onRotate}>
+                  <button className={toolbarBtn} title="Rotate" aria-label="Rotate" onClick={onRotate}>
                     <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h5M20 20v-5h-5M4 9a8 8 0 0114-3M20 15a8 8 0 01-14 3" />
                     </svg>
                   </button>
-                  <button className={toolbarBtn} title="Undo" onClick={onRevert}>
+                  <button className={toolbarBtn} title="Undo" aria-label="Undo" onClick={onRevert}>
                     <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h10a5 5 0 015 5v0a5 5 0 01-5 5H8M3 10l4-4M3 10l4 4" />
                     </svg>
@@ -428,7 +411,7 @@ export default function FocusMode({
               {!isCurrentActive && (
                 <button
                   onClick={() => onPick(current.id)}
-                  className="rounded-lg bg-[#A8C3A4] px-5 py-2 text-sm font-bold text-black transition-colors hover:bg-[#97b593]"
+                  className="rounded-control bg-accent-primary px-5 py-2 text-sm font-bold text-accent-primary-ink transition-colors hover:bg-accent-primary-hover"
                 >
                   Use this reference
                 </button>
@@ -436,63 +419,47 @@ export default function FocusMode({
 
               {/* ⋯ menu — Copy/Export/Generate Palette always; Delete only for the active image */}
               <div className="relative">
-                <button
-                  className={toolbarBtn}
-                  title="More options"
-                  onClick={() => setMenuOpen((v) => !v)}
-                >
+                <button className={toolbarBtn} title="More options" aria-label="More options" onClick={() => setMenuOpen((v) => !v)}>
                   <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
                     <circle cx="5" cy="12" r="1.5" />
                     <circle cx="12" cy="12" r="1.5" />
                     <circle cx="19" cy="12" r="1.5" />
                   </svg>
                 </button>
-                {menuOpen && (
-                  <div
-                    className={`absolute right-0 bottom-full mb-2 z-50 w-44 overflow-hidden rounded-xl border shadow-2xl ${
-                      isDark ? "border-zinc-700 bg-[#242428]" : "border-slate-200 bg-white"
-                    }`}
-                  >
+                <Popover isOpen={menuOpen} onClose={() => setMenuOpen(false)} width="w-44" align="right" placement="top">
+                  <div className="flex flex-col">
                     {isCurrentActive && (
                       <button
                         onClick={() => {
                           setMenuOpen(false);
                           onClearSlot();
                         }}
-                        className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors ${
-                          isDark ? "text-slate-200 hover:bg-zinc-800" : "text-slate-700 hover:bg-slate-100"
-                        }`}
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-ink-primary transition-colors hover:bg-surface-sunken"
                       >
                         Delete
                       </button>
                     )}
                     <button
                       onClick={copyImage}
-                      className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors ${
-                        isDark ? "text-slate-200 hover:bg-zinc-800" : "text-slate-700 hover:bg-slate-100"
-                      }`}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-ink-primary transition-colors hover:bg-surface-sunken"
                     >
                       Copy
                     </button>
                     <button
                       onClick={exportImage}
-                      className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors ${
-                        isDark ? "text-slate-200 hover:bg-zinc-800" : "text-slate-700 hover:bg-slate-100"
-                      }`}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-ink-primary transition-colors hover:bg-surface-sunken"
                     >
                       Export
                     </button>
                     <button
                       onClick={generatePalette}
                       disabled={isGenerating}
-                      className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors disabled:opacity-50 ${
-                        isDark ? "text-slate-200 hover:bg-zinc-800" : "text-slate-700 hover:bg-slate-100"
-                      }`}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-ink-primary transition-colors hover:bg-surface-sunken disabled:opacity-50"
                     >
                       {isGenerating ? "Generating…" : "Generate Palette"}
                     </button>
                   </div>
-                )}
+                </Popover>
               </div>
             </div>
           )}
@@ -502,9 +469,7 @@ export default function FocusMode({
           <button
             onClick={goNext}
             disabled={index === images.length - 1}
-            className={`absolute right-2 z-10 flex h-10 w-10 items-center justify-center rounded-full shadow-lg transition-opacity disabled:opacity-30 ${
-              isDark ? "bg-[#242428] text-slate-200" : "bg-white text-slate-700"
-            }`}
+            className="absolute right-2 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-surface-overlay text-ink-secondary shadow-lg transition-opacity disabled:opacity-30"
             aria-label="Next image"
           >
             ›

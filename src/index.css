@@ -2,13 +2,67 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Design tokens — one warm/tactile palette, in both themes, defined once
+   here instead of as hardcoded hex scattered through every component.
+   `data-theme` is set on <html> by App.jsx's theme state (and mirrored as a
+   static fallback in index.html for the pre-hydration frame). Values are
+   raw "R G B" triples so Tailwind's rgb(var(--x) / <alpha-value>) pattern
+   in tailwind.config.js can still apply opacity modifiers. */
+:root[data-theme="dark"] {
+  /* Neutral, not brown — the warm/tactile feel in dark mode comes from the
+     sage/clay accents and the warm-tinted card shadow below, not from a
+     tinted background. (An earlier pass warmed these surfaces themselves
+     toward walnut/graphite and it read as muddy — reverted.) */
+  --color-surface-canvas: 26 26 26; /* #1A1A1A */
+  --color-surface-raised: 34 34 34; /* #222222 */
+  --color-surface-sunken: 20 20 20; /* #141414 */
+  --color-surface-overlay: 30 30 30; /* #1E1E1E */
+  --color-border-default: 51 51 51; /* #333333 */
+  --color-border-strong: 68 68 68; /* #444444 */
+  --color-ink-primary: 237 237 237; /* #EDEDED */
+  --color-ink-secondary: 168 168 168; /* #A8A8A8 */
+  --color-ink-muted: 122 122 122; /* #7A7A7A */
+  --color-accent-primary: 168 195 164; /* #A8C3A4 sage, unchanged */
+  --color-accent-primary-hover: 151 181 147; /* #97B593, unchanged */
+  --color-accent-primary-soft: 46 58 44; /* #2E3A2C */
+  --color-accent-primary-ink: 20 20 20; /* text/icon color placed on the accent fill */
+  --color-accent-warm: 217 138 94; /* #D98A5E clay */
+  --color-accent-warm-soft: 58 42 32; /* #3A2A20 */
+  --color-danger-default: 229 152 155; /* #E5989B, unchanged */
+  --color-danger-hover: 217 127 131; /* #D97F83, unchanged */
+  --color-focus-ring: 168 195 164; /* #A8C3A4 */
+  --shadow-card: 0 2px 10px -2px rgb(0 0 0 / 0.5);
+}
+
+:root[data-theme="light"] {
+  --color-surface-canvas: 243 239 230; /* #F3EFE6 warm linen */
+  --color-surface-raised: 255 254 251; /* #FFFEFB */
+  --color-surface-sunken: 234 228 214; /* #EAE4D6 */
+  --color-surface-overlay: 255 255 255; /* #FFFFFF */
+  --color-border-default: 223 216 200; /* #DFD8C8 */
+  --color-border-strong: 201 191 168; /* #C9BFA8 */
+  --color-ink-primary: 36 31 23; /* #241F17 */
+  --color-ink-secondary: 91 84 69; /* #5B5445 */
+  --color-ink-muted: 138 130 112; /* #8A8270 */
+  --color-accent-primary: 92 118 88; /* #5C7658 sage, unchanged */
+  --color-accent-primary-hover: 70 89 63; /* #46593F */
+  --color-accent-primary-soft: 225 232 221; /* #E1E8DD */
+  --color-accent-primary-ink: 255 254 251; /* text/icon color placed on the accent fill */
+  --color-accent-warm: 181 100 63; /* #B5643F clay */
+  --color-accent-warm-soft: 240 221 209; /* #F0DDD1 */
+  --color-danger-default: 179 74 82; /* #B34A52 */
+  --color-danger-hover: 154 61 68; /* #9A3D44 */
+  --color-focus-ring: 92 118 88; /* #5C7658 */
+  --shadow-card: 0 2px 8px -2px rgb(36 25 15 / 0.18);
+}
+
 @layer base {
   html {
-    @apply bg-base text-text-primary;
+    @apply bg-surface-canvas text-ink-primary;
   }
 
   body {
-    @apply min-h-screen bg-base text-text-primary antialiased;
+    @apply min-h-screen bg-surface-canvas text-ink-primary antialiased;
   }
 }
 

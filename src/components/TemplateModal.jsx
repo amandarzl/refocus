@@ -1,60 +1,26 @@
-export default function TemplateModal({
-  isDark,
-  templates,
-  onClose,
-  onSelect,
-}) {
-  return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={onClose}
-      />
+import Modal from "./ui/Modal.jsx";
+import Button from "./ui/Button.jsx";
 
-      {/* Modal Container */}
-      <div
-        className={`relative max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border p-6 shadow-2xl sm:p-8 ${
-          isDark
-            ? "border-zinc-800 bg-[#1F1F23] text-slate-100"
-            : "border-slate-200 bg-white text-slate-900"
-        }`}
-      >
+export default function TemplateModal({ templates, onClose, onSelect }) {
+  return (
+    <Modal onClose={onClose} maxWidth="3xl" labelledBy="template-modal-title">
+      <div className="max-h-[90vh] overflow-y-auto p-6 sm:p-8">
         {/* Header */}
         <div className="flex items-start justify-between">
           <div>
-            <h2 className="text-xl font-bold tracking-tight sm:text-2xl">
-              SELECT YOUR TEMPLATE FRAMEWORK
+            <h2 id="template-modal-title" className="font-display text-xl font-semibold tracking-tight text-ink-primary sm:text-2xl">
+              Select your template framework
             </h2>
-            <p
-              className={`mt-1 text-sm ${
-                isDark ? "text-slate-400" : "text-slate-500"
-              }`}
-            >
-              Choose a framework that matches your creative goal.
-            </p>
+            <p className="mt-1 text-sm text-ink-secondary">Choose a framework that matches your creative goal.</p>
           </div>
           <button
             onClick={onClose}
-            className={`rounded-lg p-2 transition-colors ${
-              isDark
-                ? "text-slate-400 hover:bg-zinc-800 hover:text-slate-200"
-                : "text-slate-500 hover:bg-slate-100 hover:text-slate-700"
-            }`}
+            className="rounded-control p-2 text-ink-secondary transition-colors hover:bg-surface-sunken hover:text-ink-primary"
             title="Close"
+            aria-label="Close"
           >
-            <svg
-              className="h-5 w-5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M6 18L18 6M6 6l12 12"
-              />
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
@@ -64,28 +30,12 @@ export default function TemplateModal({
           {templates.map((template) => (
             <div
               key={template.id}
-              className={`group flex flex-col rounded-xl border p-5 transition-all hover:-translate-y-0.5 hover:shadow-lg ${
-                isDark
-                  ? "border-zinc-800 bg-[#252529] hover:border-[#A8C3A4]/50"
-                  : "border-slate-200 bg-white hover:border-[#A8C3A4]/70 hover:shadow-md"
-              }`}
+              className="group flex flex-col rounded-panel border border-border bg-surface-raised p-5 shadow-card transition-all hover:-translate-y-0.5 hover:border-accent-primary/60 hover:shadow-2xl"
             >
               {/* Template Icon */}
-              <div
-                className={`flex h-12 w-12 items-center justify-center rounded-lg ${
-                  isDark ? "bg-[#2E2E33]" : "bg-slate-100"
-                }`}
-              >
+              <div className="flex h-12 w-12 items-center justify-center rounded-control bg-surface-sunken">
                 {template.id === "cute-cozy" && (
-                  <svg
-                    className={`h-6 w-6 ${
-                      isDark ? "text-slate-300" : "text-slate-600"
-                    }`}
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                  >
+                  <svg className="h-6 w-6 text-ink-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -94,66 +44,27 @@ export default function TemplateModal({
                   </svg>
                 )}
                 {template.id === "dynamic-action" && (
-                  <svg
-                    className={`h-6 w-6 ${
-                      isDark ? "text-slate-300" : "text-slate-600"
-                    }`}
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M13 10V3L4 14h7v7l9-11h-7z"
-                    />
+                  <svg className="h-6 w-6 text-accent-warm" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
                   </svg>
                 )}
                 {template.id === "blank-canvas" && (
-                  <svg
-                    className={`h-6 w-6 ${
-                      isDark ? "text-slate-300" : "text-slate-600"
-                    }`}
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M4 5a1 1 0 011-1h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5z"
-                    />
+                  <svg className="h-6 w-6 text-ink-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5z" />
                   </svg>
                 )}
               </div>
 
-              <h3
-                className={`mt-4 text-base font-bold ${
-                  isDark ? "text-white" : "text-slate-900"
-                }`}
-              >
-                {template.name}
-              </h3>
-              <p
-                className={`mt-1 flex-1 text-sm ${
-                  isDark ? "text-slate-400" : "text-slate-500"
-                }`}
-              >
-                {template.description}
-              </p>
+              <h3 className="mt-4 font-display text-base font-semibold text-ink-primary">{template.name}</h3>
+              <p className="mt-1 flex-1 text-sm text-ink-secondary">{template.description}</p>
 
-              <button
-                onClick={() => onSelect(template)}
-                className="mt-5 rounded-lg bg-[#A8C3A4] py-2.5 text-sm font-bold text-black transition-colors hover:bg-[#97b593]"
-              >
-                SELECT →
-              </button>
+              <Button variant="primary" onClick={() => onSelect(template)} className="mt-5 justify-center py-2.5">
+                Select →
+              </Button>
             </div>
           ))}
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

@@ -13,7 +13,7 @@ import { setActiveReference } from "../board/constants.js";
 // `boardSlots`/`onSlotsChange` are the same board state App.jsx passes to
 // ReferenceBoard — only used here to make an on-the-board folder's newly
 // uploaded photo its active picture when you upload to it from this page.
-export default function ReferenceLibrary({ isDark, boardSlots, onSlotsChange }) {
+export default function ReferenceLibrary({ boardSlots, onSlotsChange }) {
   const folders = useLiveQuery(() => db.folders.orderBy("order").toArray(), []) || [];
   const allRefs = useLiveQuery(() => db.references.toArray(), []) || [];
 
@@ -54,6 +54,10 @@ export default function ReferenceLibrary({ isDark, boardSlots, onSlotsChange }) 
 
   const handleRenameFolder = async (id, name) => {
     await db.folders.update(id, { name });
+  };
+
+  const handleChangeFolderColor = async (id, color) => {
+    await db.folders.update(id, { color });
   };
 
   const confirmDeleteFolder = async () => {
@@ -117,7 +121,6 @@ export default function ReferenceLibrary({ isDark, boardSlots, onSlotsChange }) 
     <div className="flex-1 overflow-y-auto">
       {openFolder ? (
         <PhotoGrid
-          isDark={isDark}
           folder={openFolder}
           photos={photosInOpenFolder}
           allFolders={folders}
@@ -133,7 +136,6 @@ export default function ReferenceLibrary({ isDark, boardSlots, onSlotsChange }) 
         />
       ) : (
         <FolderList
-          isDark={isDark}
           folders={folders}
           counts={counts}
           stats={archiveStats}
@@ -141,12 +143,12 @@ export default function ReferenceLibrary({ isDark, boardSlots, onSlotsChange }) 
           onAddFolder={handleAddFolder}
           onDeleteFolder={setFolderToDelete}
           onRenameFolder={handleRenameFolder}
+          onChangeFolderColor={handleChangeFolderColor}
         />
       )}
 
       {uploadFolder && (
         <FolderUploadModal
-          isDark={isDark}
           folder={uploadFolder}
           onClose={() => setUploadFolderId(null)}
           onAddReferences={handleAddReferences}
@@ -155,7 +157,6 @@ export default function ReferenceLibrary({ isDark, boardSlots, onSlotsChange }) 
 
       {folderToDelete && (
         <ConfirmDialog
-          isDark={isDark}
           title={`Remove "${folderToDelete.name}"?`}
           message="This deletes the folder and every photo inside it. This can't be undone."
           confirmLabel="Delete"
