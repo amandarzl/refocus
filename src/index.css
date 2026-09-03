@@ -21,6 +21,7 @@
   --color-accent-primary: 168 195 164; /* #A8C3A4 sage, unchanged */
   --color-accent-primary-hover: 151 181 147; /* #97B593, unchanged */
   --color-accent-primary-soft: 46 58 44; /* #2E3A2C */
+  --color-accent-primary-ink: 20 17 14; /* text/icon color placed on the accent fill */
   --color-accent-warm: 217 138 94; /* #D98A5E clay */
   --color-accent-warm-soft: 58 42 32; /* #3A2A20 */
   --color-danger-default: 229 152 155; /* #E5989B, unchanged */
@@ -42,6 +43,7 @@
   --color-accent-primary: 92 118 88; /* #5C7658 sage, unchanged */
   --color-accent-primary-hover: 70 89 63; /* #46593F */
   --color-accent-primary-soft: 225 232 221; /* #E1E8DD */
+  --color-accent-primary-ink: 255 254 251; /* text/icon color placed on the accent fill */
   --color-accent-warm: 181 100 63; /* #B5643F clay */
   --color-accent-warm-soft: 240 221 209; /* #F0DDD1 */
   --color-danger-default: 179 74 82; /* #B34A52 */

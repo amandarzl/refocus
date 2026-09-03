@@ -39,6 +39,7 @@ export default {
           primary: withOpacity("--color-accent-primary"),
           "primary-hover": withOpacity("--color-accent-primary-hover"),
           "primary-soft": withOpacity("--color-accent-primary-soft"),
+          "primary-ink": withOpacity("--color-accent-primary-ink"),
           warm: withOpacity("--color-accent-warm"),
           "warm-soft": withOpacity("--color-accent-warm-soft"),
         },
