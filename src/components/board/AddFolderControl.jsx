@@ -10,6 +10,7 @@ export default function AddFolderControl({
   existingFolders = [],
   onCreateFolder,
   onAttachFolder,
+  tileSize = "tile",
 }) {
   const [mode, setMode] = useState(null); // null | "create" | "pick"
   const [name, setName] = useState("");
@@ -23,7 +24,7 @@ export default function AddFolderControl({
 
   return (
     <div>
-      <EmptyTile size="tile">
+      <EmptyTile size={tileSize}>
         {mode === "create" ? (
           <input
             autoFocus

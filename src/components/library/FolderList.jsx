@@ -147,7 +147,7 @@ export default function FolderList({
             </div>
           );
         })}
-        <AddFolderControl onCreateFolder={onAddFolder} />
+        <AddFolderControl onCreateFolder={onAddFolder} tileSize="folder" />
       </div>
     </div>
   );
