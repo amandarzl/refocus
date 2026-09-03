@@ -4,7 +4,7 @@ import Modal from "./ui/Modal.jsx";
 import Button from "./ui/Button.jsx";
 import EmptyTile from "./ui/EmptyTile.jsx";
 
-export default function FinishModal({ goal, session, onClose, onSave }) {
+export default function FinishModal({ session, onClose, onSave }) {
   const [image, setImage] = useState(null);
   const [palette, setPalette] = useState([]);
   const [notes, setNotes] = useState("");
@@ -34,7 +34,6 @@ export default function FinishModal({ goal, session, onClose, onSave }) {
   const handleSave = async () => {
     const sessionData = {
       id: session?.id || Date.now(),
-      goal,
       image,
       palette,
       notes,
@@ -77,11 +76,6 @@ export default function FinishModal({ goal, session, onClose, onSave }) {
         </div>
 
         <div className="mt-6 flex flex-col gap-5">
-          {/* Goal badge */}
-          <div className="flex items-center gap-2">
-            <span className="rounded-full bg-accent-primary px-3 py-1 text-xs font-bold text-accent-primary-ink">{goal}</span>
-          </div>
-
           {/* Drawing Snapshot Upload */}
           <div>
             <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-ink-muted">Drawing Snapshot</label>

@@ -33,13 +33,12 @@ export default function ReferenceBoard({
   const folders = foldersRaw || [];
   const allRefs = useLiveQuery(() => db.references.toArray(), []) || [];
 
-  // Folder creation for a brand-new library now happens per-template, the
-  // moment a template is actually selected (see App.jsx's
-  // ensureTemplateFolders/buildInitialBoardSlots) — no blanket seed here.
+  // Folder creation for a brand-new library happens in NewDrawingModal.jsx,
+  // the moment a new drawing is actually started — no blanket seed here.
 
-  // A folder is "on the board" purely by having a boardSlots entry — the
-  // default folders (Form/Pose/Color/Vibe) get one automatically when a
-  // drawing starts (see App.jsx's buildInitialBoardSlots), but from then on
+  // A folder is "on the board" purely by having a boardSlots entry —
+  // whichever folders were checked in NewDrawingModal get one the moment a
+  // drawing starts (see App.jsx's handleStartDrawing), but from then on
   // they're detachable/reattachable exactly like any other folder. A folder
   // created in the Add References library stays library-only until it's
   // explicitly attached here — attachment is per-drawing-session, tracked
