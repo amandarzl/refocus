@@ -82,8 +82,9 @@ export default function FolderList({
                 style={{ backgroundColor: color, clipPath: FOLDER_CLIP, color: FOLDER_INK }}
                 className="flex aspect-[4/3] w-full cursor-pointer flex-col justify-between p-3 pt-6 text-left shadow-card outline-none transition-transform hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-canvas"
               >
-                {/* Color swatch — click to pick a different folder color;
-                    doubles as the folder's little corner "tag" visually. */}
+                {/* Change color — an always-visible button (not a hover
+                    reveal, unlike Delete below), so it's discoverable
+                    without hunting for it. */}
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -91,9 +92,12 @@ export default function FolderList({
                   }}
                   title="Change folder color"
                   aria-label="Change folder color"
-                  className="h-2.5 w-2.5 flex-shrink-0 rounded-sm border-2 transition-transform hover:scale-125"
-                  style={{ borderColor: FOLDER_INK, opacity: 0.55 }}
-                />
+                  className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-white/50 shadow-sm ring-1 ring-black/10 transition-transform hover:scale-110"
+                >
+                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke={FOLDER_INK} strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 2C12 2 5 10.5 5 15a7 7 0 0014 0C19 10.5 12 2 12 2z" />
+                  </svg>
+                </button>
 
                 <span onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
                   <InlineRenameField
