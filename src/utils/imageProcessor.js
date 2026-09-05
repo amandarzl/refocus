@@ -218,6 +218,20 @@ export function blobToBase64(blob) {
   });
 }
 
+// Pulls image Files straight out of a paste event's clipboardData — shared
+// by every paste target (the folder upload modal, an open archive folder,
+// a hovered board slot) so "is there an image on the clipboard" is answered
+// the same way everywhere. Returns [] for a text-only paste, so callers can
+// use that to leave normal text pasting (rename fields, tag inputs) alone.
+export function getImageFilesFromClipboard(clipboardData) {
+  const items = clipboardData?.items;
+  if (!items) return [];
+  return Array.from(items)
+    .filter((item) => item.type && item.type.startsWith("image/"))
+    .map((item) => item.getAsFile())
+    .filter(Boolean);
+}
+
 // Shared upload pipeline: raw File objects (from a file input, drag & drop,
 // or clipboard paste) in, ready-to-store db.references rows out. Used by
 // FolderUploadModal's own dropzone and by any other drop target (e.g. the

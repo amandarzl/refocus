@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "../../db.js";
-import { extractPaletteFromImageSrc } from "../../utils/imageProcessor.js";
+import {
+  extractPaletteFromImageSrc,
+  filesToReferences,
+  getImageFilesFromClipboard,
+} from "../../utils/imageProcessor.js";
 import FolderSlot from "./FolderSlot.jsx";
 import AddFolderMenu from "./AddFolderMenu.jsx";
 import FocusMode from "./FocusMode.jsx";
@@ -10,6 +14,8 @@ import BreakBanner from "./BreakBanner.jsx";
 import PaletteSection from "./PaletteSection.jsx";
 import Button from "../ui/Button.jsx";
 import Popover from "../ui/Popover.jsx";
+import TourCallout from "../ui/TourCallout.jsx";
+import CardSizeControl, { cardGridStyle, DEFAULT_WIDTH } from "../ui/CardSizeControl.jsx";
 import {
   TIMER_DURATIONS,
   TIMER_DURATION_DEFAULT,
@@ -32,6 +38,13 @@ export default function ReferenceBoard({
   const foldersRaw = useLiveQuery(() => db.folders.orderBy("order").toArray(), []);
   const folders = foldersRaw || [];
   const allRefs = useLiveQuery(() => db.references.toArray(), []) || [];
+  // Accessibility preference for this board's own folder grid — see
+  // CardSizeControl.jsx. "loading" is a sentinel distinct from `undefined`
+  // (which `.value` would also be for a genuinely absent row) so a
+  // still-loading read is never mistaken for "no preference set" — see
+  // App.jsx's welcomeSetting for the same pattern.
+  const cardMinWidthSetting = useLiveQuery(() => db.settings.get("cardMinWidth"), [], "loading");
+  const cardMinWidth = cardMinWidthSetting?.value || DEFAULT_WIDTH;
 
   // Folder creation for a brand-new library happens in NewDrawingModal.jsx,
   // the moment a new drawing is actually started — no blanket seed here.
@@ -51,8 +64,11 @@ export default function ReferenceBoard({
     () => folders.filter((f) => attachedFolderIds.has(f.id)),
     [folders, attachedFolderIds],
   );
+  // Excludes drafts too — an orphaned draft from an abandoned, never-saved
+  // session (see App.jsx's confirmBoardFolders) isn't "existing" yet, so it
+  // shouldn't be offered back via "Add existing" until it's confirmed.
   const attachableFolders = useMemo(
-    () => folders.filter((f) => !attachedFolderIds.has(f.id)),
+    () => folders.filter((f) => !attachedFolderIds.has(f.id) && !f.isDraft),
     [folders, attachedFolderIds],
   );
 
@@ -148,11 +164,15 @@ export default function ReferenceBoard({
   // 1", "New folder 2", …) since the point is to add several quickly and
   // rename each after, right on its card.
   const handleCreateFolders = async (count) => {
-    // Continue the placeholder numbering from whatever's already in use
-    // (anywhere — attached or not) instead of always restarting at 1, so a
-    // second or third batch never repeats a name a previous one already
-    // used (e.g. six existing "New folder"s → next batch starts at 7).
-    const usedNumbers = folders
+    // Continue the placeholder numbering from whatever's actually still
+    // around — confirmed folders anywhere, or a draft still attached to
+    // this board — so a second batch never repeats a name still in use.
+    // Orphaned drafts from some other, abandoned session are excluded: they
+    // don't show up anywhere you'd see them (Add References, this same
+    // "New folder" list), so they shouldn't be able to push the count up
+    // either — once 1-4 are gone from view, the next one really is 1.
+    const relevantFolders = folders.filter((f) => !f.isDraft || attachedFolderIds.has(f.id));
+    const usedNumbers = relevantFolders
       .map((f) => /^New folder (\d+)$/i.exec(f.name)?.[1])
       .filter(Boolean)
       .map(Number);
@@ -165,6 +185,7 @@ export default function ReferenceBoard({
         name: `New folder ${startAt + i}`,
         order: baseOrder + i,
         createdAt: Date.now(),
+        isDraft: true,
       });
       newSlots.push({ folderId: newId, activeReferenceId: null, locked: false });
     }
@@ -175,18 +196,40 @@ export default function ReferenceBoard({
     await db.folders.update(folderId, { name });
   };
 
-  const handleAttachFolder = (folderId) => {
-    if (boardSlots.some((s) => s.folderId === folderId)) return;
-    onSlotsChange([...boardSlots, { folderId, activeReferenceId: null, locked: false }]);
+  // Takes an array so "Add existing" can attach a whole checklist's worth
+  // at once in a single state update — calling the single-folder version
+  // of this in a loop would have each call read the same stale
+  // `boardSlots` closure and overwrite the previous one's result instead
+  // of accumulating.
+  const handleAttachFolders = (folderIds) => {
+    const existingIds = new Set(boardSlots.map((s) => s.folderId));
+    const newSlots = folderIds
+      .filter((id) => !existingIds.has(id))
+      .map((folderId) => ({ folderId, activeReferenceId: null, locked: false }));
+    if (newSlots.length === 0) return;
+    onSlotsChange([...boardSlots, ...newSlots]);
   };
 
   // Removes a manually-attached folder's card from this board only — the
   // folder and its photos are untouched in Add References, and it's still
   // pickable again from "Add existing" any time. Deleting a folder for
   // good only ever happens on the Add References page.
-  const handleDetachFolder = (folderId) => {
+  const handleDetachFolder = async (folderId) => {
     onSlotsChange(boardSlots.filter((s) => s.folderId !== folderId));
     if (focusFolderId === folderId) closeFocus();
+
+    // A folder only counts as "real" once it's added directly in Add
+    // References, or the board session it was created on has actually been
+    // saved (see App.jsx's confirmBoardFolders) — no exceptions for
+    // Form/Pose/Gesture/etc. just because of their name. Until then it's
+    // still a draft, and detaching it while empty has nothing worth
+    // keeping, so it's deleted outright instead of lingering as a
+    // meaningless entry in Add References.
+    const folder = folders.find((f) => f.id === folderId);
+    const hasPhotos = (refsByFolder.get(folderId) || []).length > 0;
+    if (folder?.isDraft && !hasPhotos) {
+      await db.folders.delete(folderId);
+    }
   };
 
   // --- Drag a folder card's picture onto another folder card to move it
@@ -402,9 +445,79 @@ export default function ReferenceBoard({
   // --- UI state ---
   const [uploadFolderId, setUploadFolderId] = useState(null);
   const [focusFolderId, setFocusFolderId] = useState(null);
+  // Which slot's card the mouse is currently over — just enough to tell
+  // Ctrl+V which folder to paste into (see the paste effect below).
+  const [hoveredFolderId, setHoveredFolderId] = useState(null);
+
+  // Ctrl+V anywhere on the board adds straight to whichever folder you're
+  // looking at — the folder open in Focus Mode (a full overlay, so hover
+  // can't apply there), otherwise whichever slot card the mouse is over.
+  // Skipped while "Add more" is already open for a slot (it owns paste
+  // itself, see FolderUploadModal.jsx) so a paste never lands twice.
+  useEffect(() => {
+    if (uploadFolderId != null) return;
+    const handleWindowPaste = async (e) => {
+      const imageFiles = getImageFilesFromClipboard(e.clipboardData);
+      if (imageFiles.length === 0) return;
+      const targetId = focusFolderId ?? hoveredFolderId;
+      const target = folders.find((f) => f.id === targetId);
+      if (!target) return;
+      const refs = await filesToReferences(imageFiles, target.id);
+      if (refs.length > 0) await handleAddReferences(refs);
+    };
+    window.addEventListener("paste", handleWindowPaste);
+    return () => window.removeEventListener("paste", handleWindowPaste);
+  }, [uploadFolderId, focusFolderId, hoveredFolderId, folders, boardSlots]);
   const [focusIndex, setFocusIndex] = useState(0);
   const [isAddFolderMenuOpen, setIsAddFolderMenuOpen] = useState(false);
   const [isToolbarMenuOpen, setIsToolbarMenuOpen] = useState(false);
+
+  // --- First-time board tour: Shuffle -> first slot's Lock -> Focus Lock,
+  // each shown once ever (see App.jsx's matching hasSeenWelcome, for the
+  // hub-side welcome modal — a separate flag). Only starts once there's
+  // at least one folder on the board, since otherwise there's nothing for
+  // Shuffle/Lock to point at — someone whose first drawing is a blank
+  // canvas just gets the tour the next time they open a populated board.
+  const boardTourSetting = useLiveQuery(() => db.settings.get("hasSeenBoardTour"), [], "loading");
+  const [tourStep, setTourStep] = useState(null); // 'shuffle' | 'lock' | 'focusLock' | null
+  const hasStartedTour = useRef(false);
+
+  useEffect(() => {
+    // Onboarding temporarily disabled — see App.jsx's OnboardingModal render
+    // and Header.jsx's "Replay welcome tour" for the other two pieces of
+    // this same feature, also disabled. `tourStep` simply never leaves
+    // `null` this way, so every TourCallout below (and FolderSlot's
+    // tourActive) stays inert without touching the rest of this logic.
+    return;
+    // eslint-disable-next-line no-unreachable
+    if (hasStartedTour.current) return;
+    if (boardTourSetting === "loading") return; // still loading — see App.jsx's welcomeSetting for why
+    if (boardTourSetting?.value) return; // already seen
+    if (boardSlots.length === 0) return; // nothing to point at yet
+    hasStartedTour.current = true;
+    setTourStep("shuffle");
+  }, [boardTourSetting, boardSlots.length]);
+
+  const finishTour = async () => {
+    setTourStep(null);
+    await db.settings.put({ key: "hasSeenBoardTour", value: true });
+  };
+
+  const advanceTour = () => {
+    if (tourStep === "shuffle") {
+      // The lock step points at the first slot's own lock toggle, which
+      // only renders once that slot actually has a picture to lock (see
+      // FolderSlot.jsx) — skip straight to Focus Lock if it's still
+      // empty rather than pointing at a control that isn't there.
+      const firstFolder = orderedBoardFolders[0];
+      const hasPicture = firstFolder && !!getSlot(firstFolder.id).activeReferenceId;
+      setTourStep(hasPicture ? "lock" : "focusLock");
+    } else if (tourStep === "lock") {
+      setTourStep("focusLock");
+    } else {
+      finishTour();
+    }
+  };
 
   const openFocus = (folder) => {
     const pool = refsByFolder.get(folder.id) || [];
@@ -437,6 +550,20 @@ export default function ReferenceBoard({
   const [draggingFolderId, setDraggingFolderId] = useState(null);
   const cardRefs = useRef({});
   const dragPointerId = useRef(null);
+
+  // A slot card can unmount while the mouse is still "over" it — opening
+  // Focus Mode or Rearrange mode replaces the grid outright, and a card's
+  // own onMouseLeave never fires for that (only a real pointer move would).
+  // Left alone, `hoveredFolderId` would keep pointing at that folder even
+  // after you've moved on, so Ctrl+V could silently land somewhere you're
+  // no longer looking at. Clearing it whenever the grid stops being the
+  // literal thing under the mouse means a stale hover never outlives the
+  // view that produced it — the next genuine hover sets it fresh.
+  useEffect(() => {
+    if (focusFolderId != null || uploadFolderId != null || isRearranging || isBoardLocked) {
+      setHoveredFolderId(null);
+    }
+  }, [focusFolderId, uploadFolderId, isRearranging, isBoardLocked]);
 
   const handleDragPointerDown = (folderId, e) => {
     if (!isRearranging) return;
@@ -618,6 +745,7 @@ export default function ReferenceBoard({
               </Button>
             ) : (
               <>
+                <CardSizeControl value={cardMinWidth} />
                 <div className="relative ml-auto">
                   <Button
                     variant={isAddFolderMenuOpen ? "primary" : "secondary"}
@@ -634,30 +762,51 @@ export default function ReferenceBoard({
                     isOpen={isAddFolderMenuOpen}
                     existingFolders={attachableFolders}
                     onCreateFolders={handleCreateFolders}
-                    onAttachFolder={handleAttachFolder}
+                    onAttachFolders={handleAttachFolders}
                     onClose={() => setIsAddFolderMenuOpen(false)}
                   />
                 </div>
-                <Button variant="secondary" icon label="Shuffle" onClick={handleShuffle}>
-                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="16 3 21 3 21 8" />
-                    <line x1="4" y1="20" x2="21" y2="3" />
-                    <polyline points="21 16 21 21 16 21" />
-                    <line x1="15" y1="15" x2="21" y2="21" />
-                    <line x1="4" y1="4" x2="9" y2="9" />
-                  </svg>
-                </Button>
-                <Button
-                  variant="secondary"
-                  icon
-                  label="Focus Lock — hide controls and freeze the pictures"
-                  onClick={() => onToggleBoardLocked(true)}
-                >
-                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="5" y="11" width="14" height="10" rx="2" />
-                    <path d="M8 11V7a4 4 0 018 0v4" />
-                  </svg>
-                </Button>
+                <div className="relative">
+                  <Button variant="secondary" icon label="Shuffle" onClick={handleShuffle}>
+                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="16 3 21 3 21 8" />
+                      <line x1="4" y1="20" x2="21" y2="3" />
+                      <polyline points="21 16 21 21 16 21" />
+                      <line x1="15" y1="15" x2="21" y2="21" />
+                      <line x1="4" y1="4" x2="9" y2="9" />
+                    </svg>
+                  </Button>
+                  {tourStep === "shuffle" && (
+                    <TourCallout
+                      message="Shuffle swaps in a new picture from each unlocked folder. Try it anytime you want a fresh angle."
+                      align="right"
+                      onAdvance={advanceTour}
+                      onSkip={finishTour}
+                    />
+                  )}
+                </div>
+                <div className="relative">
+                  <Button
+                    variant="secondary"
+                    icon
+                    label="Focus Lock — hide controls and freeze the pictures"
+                    onClick={() => onToggleBoardLocked(true)}
+                  >
+                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="5" y="11" width="14" height="10" rx="2" />
+                      <path d="M8 11V7a4 4 0 018 0v4" />
+                    </svg>
+                  </Button>
+                  {tourStep === "focusLock" && (
+                    <TourCallout
+                      message="Focus Lock hides every control so you can just draw. Unlock anytime from the same spot."
+                      advanceLabel="Got it"
+                      align="right"
+                      onAdvance={finishTour}
+                      onSkip={finishTour}
+                    />
+                  )}
+                </div>
                 <div className="relative">
                   <Button
                     variant={isToolbarMenuOpen ? "primary" : "secondary"}
@@ -725,14 +874,17 @@ export default function ReferenceBoard({
           )}
 
           {/* Folder slots */}
-          <div className="mt-6 grid grid-cols-2 gap-6 sm:grid-cols-3 lg:grid-cols-4">
-            {orderedBoardFolders.map((folder) => {
+          <div className="mt-6 grid gap-6" style={cardGridStyle(cardMinWidth)}>
+            {orderedBoardFolders.map((folder, index) => {
               const slot = getSlot(folder.id);
               return (
                 <FolderSlot
                   key={folder.id}
                   cardRef={(el) => (cardRefs.current[folder.id] = el)}
                   folder={folder}
+                  tourActive={index === 0 && tourStep === "lock"}
+                  onTourAdvance={advanceTour}
+                  onTourSkip={finishTour}
                   activeReference={refById.get(slot.activeReferenceId) || null}
                   locked={slot.locked}
                   transform={slot.transform || DEFAULT_TRANSFORM}
@@ -751,6 +903,14 @@ export default function ReferenceBoard({
                   onPhotoDragStart={() => setDraggingPhoto({ folderId: folder.id, refId: slot.activeReferenceId })}
                   onPhotoDrop={() => handleMovePhoto(folder.id)}
                   isDropTarget={!!draggingPhoto && draggingPhoto.folderId !== folder.id}
+                  onMouseEnter={
+                    isRearranging || isBoardLocked ? undefined : () => setHoveredFolderId(folder.id)
+                  }
+                  onMouseLeave={
+                    isRearranging || isBoardLocked
+                      ? undefined
+                      : () => setHoveredFolderId((current) => (current === folder.id ? null : current))
+                  }
                 />
               );
             })}

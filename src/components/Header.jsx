@@ -14,6 +14,7 @@ export default function Header({
   onLogoClick,
   onStartDrawing,
   onFinishDrawing,
+  onReplayTour,
 }) {
   const isDark = theme === "dark";
 
@@ -231,6 +232,21 @@ export default function Header({
                     <span>📂</span>
                     <span>Restore from a Backup</span>
                   </button>
+                  {/* Onboarding temporarily disabled — see App.jsx's
+                      OnboardingModal render and ReferenceBoard.jsx's
+                      tour-start effect, also disabled.
+                  <button
+                    onClick={() => {
+                      onReplayTour?.();
+                      setIsProfileOpen(false);
+                    }}
+                    title="Shows the welcome walkthrough again, including the board's Shuffle/Lock tips"
+                    className="flex w-full items-center gap-2 rounded-control px-3 py-2 text-sm text-ink-secondary transition-colors hover:bg-surface-sunken hover:text-ink-primary"
+                  >
+                    <span>👋</span>
+                    <span>Replay welcome tour</span>
+                  </button>
+                  */}
                 </div>
               </Popover>
             </div>
@@ -307,6 +323,21 @@ export default function Header({
                     <span>📂</span>
                     <span>Restore from a Backup</span>
                   </button>
+                  {/* Onboarding temporarily disabled — see App.jsx's
+                      OnboardingModal render and ReferenceBoard.jsx's
+                      tour-start effect, also disabled.
+                  <button
+                    onClick={() => {
+                      onReplayTour?.();
+                      setIsMenuOpen(false);
+                    }}
+                    title="Shows the welcome walkthrough again, including the board's Shuffle/Lock tips"
+                    className="flex w-full items-center gap-3 rounded-control px-3 py-2.5 text-sm font-medium text-ink-secondary transition-colors hover:bg-surface-sunken hover:text-ink-primary"
+                  >
+                    <span>👋</span>
+                    <span>Replay welcome tour</span>
+                  </button>
+                  */}
                 </div>
               </div>
             </Popover>

@@ -54,13 +54,13 @@ export default function AddFolderControl({
                     onAttachFolder(f.id);
                     setMode(null);
                   }}
-                  className="truncate rounded-control px-2 py-1.5 text-left text-xs font-semibold transition-colors hover:bg-surface-canvas hover:text-accent-primary"
+                  className="shrink-0 truncate rounded-control px-2 py-1.5 text-left text-xs font-semibold transition-colors hover:bg-surface-canvas hover:text-accent-primary"
                 >
                   {f.name}
                 </button>
               ))
             )}
-            <button onClick={() => setMode(null)} className="mt-auto text-center text-[11px] text-ink-muted underline">
+            <button onClick={() => setMode(null)} className="mt-auto shrink-0 text-center text-[11px] text-ink-muted underline">
               Cancel
             </button>
           </div>

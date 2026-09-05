@@ -12,21 +12,33 @@ export default function AddFolderMenu({
   isOpen,
   existingFolders = [],
   onCreateFolders,
-  onAttachFolder,
+  onAttachFolders,
   onClose,
 }) {
   const [mode, setMode] = useState(null); // null | "create" | "pick"
   const [count, setCount] = useState("1");
+  const [selectedIds, setSelectedIds] = useState([]);
 
   const close = () => {
     setMode(null);
     setCount("1");
+    setSelectedIds([]);
     onClose();
   };
 
   const submitCreate = () => {
     const clamped = Math.min(MAX_FOLDERS, Math.max(MIN_FOLDERS, parseInt(count, 10) || MIN_FOLDERS));
     onCreateFolders(clamped);
+    close();
+  };
+
+  const toggleSelected = (id) => {
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
+
+  const submitAttach = () => {
+    if (selectedIds.length === 0) return;
+    onAttachFolders(selectedIds);
     close();
   };
 
@@ -58,22 +70,36 @@ export default function AddFolderMenu({
           </div>
         </div>
       ) : mode === "pick" ? (
-        <div className="flex max-h-56 flex-col gap-0.5 overflow-y-auto p-2">
-          {existingFolders.length === 0 ? (
-            <span className="px-2 py-1 text-xs text-ink-muted">No other folders yet — add one from Add References.</span>
-          ) : (
-            existingFolders.map((f) => (
-              <button
-                key={f.id}
-                onClick={() => {
-                  onAttachFolder(f.id);
-                  close();
-                }}
-                className="truncate rounded-control px-2 py-1.5 text-left text-sm font-semibold text-ink-secondary transition-colors hover:bg-surface-sunken hover:text-accent-primary"
-              >
-                {f.name}
-              </button>
-            ))
+        <div className="p-2">
+          <div className="flex max-h-56 flex-col gap-0.5 overflow-y-auto">
+            {existingFolders.length === 0 ? (
+              <span className="px-2 py-1 text-xs text-ink-muted">No other folders yet — add one from Add References.</span>
+            ) : (
+              existingFolders.map((f) => (
+                <label
+                  key={f.id}
+                  className="flex shrink-0 cursor-pointer items-center gap-2 rounded-control px-2 py-1.5 text-sm font-semibold text-ink-secondary transition-colors hover:bg-surface-sunken hover:text-ink-primary"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.includes(f.id)}
+                    onChange={() => toggleSelected(f.id)}
+                    className="h-4 w-4 shrink-0 cursor-pointer accent-accent-primary"
+                  />
+                  <span className="truncate">{f.name}</span>
+                </label>
+              ))
+            )}
+          </div>
+          {existingFolders.length > 0 && (
+            <Button
+              variant="primary"
+              onClick={submitAttach}
+              disabled={selectedIds.length === 0}
+              className="mt-2 w-full justify-center py-1.5 text-xs"
+            >
+              Add{selectedIds.length > 0 ? ` (${selectedIds.length})` : ""}
+            </Button>
           )}
         </div>
       ) : (
@@ -84,7 +110,7 @@ export default function AddFolderMenu({
           >
             + New folder
           </button>
-          {onAttachFolder && (
+          {onAttachFolders && (
             <button
               onClick={() => setMode("pick")}
               className="flex w-full items-center gap-2 rounded-control px-3 py-2 text-left text-sm text-ink-secondary transition-colors hover:bg-surface-sunken hover:text-ink-primary"

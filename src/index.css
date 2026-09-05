@@ -66,6 +66,17 @@
   }
 }
 
+/* Scroll areas keep working exactly the same — this only suppresses the
+   browser's own scrollbar chrome (which clashed with the app's warm/tactile
+   look), not the ability to scroll. */
+* {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* old Edge/IE */
+}
+*::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, new Edge */
+}
+
 @keyframes shake {
   0%,
   100% {
@@ -88,4 +99,79 @@
 
 .animate-shake {
   animation: shake 0.5s ease-in-out;
+}
+
+/* Custom range-input styling for CardSizeControl.jsx — Tailwind utility
+   classes on an <input type="range"> can't reach its vendor thumb/track
+   pseudo-elements, so this reaches for the same raw rgb(var(--color-...))
+   tokens tailwind.config.js exposes, staying theme-correct automatically
+   instead of hardcoding hex that would ignore light/dark mode. The track
+   itself is transparent here — CardSizeControl.jsx paints the actual
+   filled/unfilled track colors via an inline gradient (needed either way
+   to know how much of it is "filled" up to the thumb), this just sizes it. */
+.card-size-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+}
+
+.card-size-slider::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 9999px;
+  /* --fill is set inline per render (CardSizeControl.jsx) from the
+     current value's percentage — Chrome/Safari have no built-in "filled
+     portion" pseudo-element the way Firefox's ::-moz-range-progress does,
+     so the fill has to be painted by hand as a two-stop gradient. */
+  background: linear-gradient(
+    to right,
+    rgb(var(--color-accent-primary)) var(--fill, 0%),
+    rgb(var(--color-border-default)) var(--fill, 0%)
+  );
+}
+
+.card-size-slider::-moz-range-track {
+  height: 6px;
+  border-radius: 9999px;
+  background: rgb(var(--color-border-default));
+}
+
+.card-size-slider::-moz-range-progress {
+  height: 6px;
+  border-radius: 9999px;
+  background: rgb(var(--color-accent-primary));
+}
+
+.card-size-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  margin-top: -6px;
+  height: 18px;
+  width: 18px;
+  border-radius: 9999px;
+  background: rgb(var(--color-accent-primary));
+  border: 2px solid rgb(var(--color-surface-overlay));
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.35);
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.card-size-slider::-moz-range-thumb {
+  height: 18px;
+  width: 18px;
+  border-radius: 9999px;
+  background: rgb(var(--color-accent-primary));
+  border: 2px solid rgb(var(--color-surface-overlay));
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.35);
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.card-size-slider:hover::-webkit-slider-thumb,
+.card-size-slider:active::-webkit-slider-thumb {
+  transform: scale(1.15);
+}
+
+.card-size-slider:hover::-moz-range-thumb,
+.card-size-slider:active::-moz-range-thumb {
+  transform: scale(1.15);
 }

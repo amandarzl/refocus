@@ -43,6 +43,14 @@ export default function FocusMode({
   onCropPointerUp,
 }) {
   const [isFullscreen, setIsFullscreen] = useState(false);
+  // A rule-of-thirds overlay for checking composition/proportions while
+  // drawing — purely a view aid, not part of the transform pipeline (see
+  // onToggleMirror/onToggleGray/onRotate below), so it's local state here
+  // rather than something persisted per-image or lifted to ReferenceBoard.
+  // Left on across images on purpose (unlike zoom, which resets per image
+  // below) since comparing proportions across several references in a row
+  // is a real use case.
+  const [showGrid, setShowGrid] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [copiedHex, setCopiedHex] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -184,6 +192,16 @@ export default function FocusMode({
     });
   };
 
+  // rotate() is a paint-only transform — it never changes the element's own
+  // layout box, so a landscape image rotated 90° still occupies its
+  // original wide-short box and spills past it, getting clipped by the
+  // stage's overflow-hidden. A 90°/270° rotation always fits within a
+  // SQUARE at least as large as either of its own two dimensions, though
+  // (rotating anything ≤N on both axes by 90° keeps both axes ≤N) — so the
+  // stage only needs to become square while actually sideways; 0°/180°
+  // keeps today's tight, non-square framing exactly as it was.
+  const isSideways = isCurrentActive && transform.rotation % 180 !== 0;
+
   const containerClass = isFullscreen
     ? "fixed inset-0 z-[75] flex flex-col bg-surface-canvas text-ink-primary"
     : "relative flex flex-col rounded-panel border border-border bg-surface-sunken text-ink-primary overflow-hidden";
@@ -260,7 +278,9 @@ export default function FocusMode({
             onPointerCancel={handlePointerUp}
             onWheel={handleWheel}
             onDoubleClick={isCropMode ? undefined : resetZoom}
-            className="relative flex max-h-[55vh] max-w-full items-center justify-center overflow-hidden rounded-panel shadow-2xl"
+            className={`relative flex max-h-[55vh] max-w-full items-center justify-center overflow-hidden shadow-2xl ${
+              isSideways ? "aspect-square" : ""
+            }`}
             style={{
               touchAction: "pan-y",
               cursor: isCropMode ? undefined : zoom > 1 ? (isPanning ? "grabbing" : "grab") : undefined,
@@ -272,16 +292,33 @@ export default function FocusMode({
                 transition: isPanning ? "none" : "transform 0.15s ease-out",
               }}
             >
-              <div style={{ clipPath: isCurrentActive && !isCropMode ? getClipStyle(transform.crop) : undefined }}>
+              <div
+                className="relative"
+                style={{ clipPath: isCurrentActive && !isCropMode ? getClipStyle(transform.crop) : undefined }}
+              >
                 <img
                   src={current.src}
                   alt={`Reference ${index + 1}`}
                   draggable={false}
-                  className={`max-h-[55vh] max-w-full select-none object-contain ${
+                  className={`select-none object-contain ${isSideways ? "max-h-full max-w-full" : "max-h-[55vh] max-w-full"} ${
                     isCurrentActive && transform.grayscale ? "grayscale" : ""
                   }`}
                   style={{ transform: isCurrentActive ? getTransformStyle(transform) : undefined }}
                 />
+                {showGrid && (
+                  <div
+                    className="pointer-events-none absolute inset-0"
+                    style={{ transform: isCurrentActive ? getTransformStyle(transform) : undefined }}
+                    aria-hidden="true"
+                  >
+                    {/* Rule-of-thirds — white lines with mix-blend-difference
+                        so they stay visible over any photo, dark or light. */}
+                    <div className="absolute bottom-0 top-0 w-px bg-white mix-blend-difference" style={{ left: "33.333%" }} />
+                    <div className="absolute bottom-0 top-0 w-px bg-white mix-blend-difference" style={{ left: "66.666%" }} />
+                    <div className="absolute inset-x-0 h-px bg-white mix-blend-difference" style={{ top: "33.333%" }} />
+                    <div className="absolute inset-x-0 h-px bg-white mix-blend-difference" style={{ top: "66.666%" }} />
+                  </div>
+                )}
               </div>
             </div>
 
@@ -403,6 +440,21 @@ export default function FocusMode({
                   <button className={toolbarBtn} title="Undo" aria-label="Undo" onClick={onRevert}>
                     <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h10a5 5 0 015 5v0a5 5 0 01-5 5H8M3 10l4-4M3 10l4 4" />
+                    </svg>
+                  </button>
+                  <button
+                    className={`${toolbarBtn} ${showGrid ? "bg-surface-sunken text-ink-primary" : ""}`}
+                    title={showGrid ? "Hide grid" : "Show grid"}
+                    aria-label={showGrid ? "Hide grid" : "Show grid"}
+                    aria-pressed={showGrid}
+                    onClick={() => setShowGrid((v) => !v)}
+                  >
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <rect x="3" y="3" width="18" height="18" rx="1" />
+                      <line x1="9" y1="3" x2="9" y2="21" />
+                      <line x1="15" y1="3" x2="15" y2="21" />
+                      <line x1="3" y1="9" x2="21" y2="9" />
+                      <line x1="3" y1="15" x2="21" y2="15" />
                     </svg>
                   </button>
                 </div>

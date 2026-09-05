@@ -1,5 +1,6 @@
 import { getTransformStyle, getClipStyle } from "./constants.js";
 import InlineRenameField from "../ui/InlineRenameField.jsx";
+import TourCallout from "../ui/TourCallout.jsx";
 
 // One folder's slot on the Reference Board: shows its current active
 // image (or a "+" placeholder when empty), a lock toggle that keeps
@@ -32,6 +33,10 @@ import InlineRenameField from "../ui/InlineRenameField.jsx";
 // every overlay control disappears and the picture can't be dragged out —
 // nothing about the board can change. Opening Focus Mode to view/zoom the
 // picture still works, since that's viewing, not altering anything here.
+//
+// `onMouseEnter`/`onMouseLeave` just report hover up to ReferenceBoard so
+// Ctrl+V knows which folder to paste an image into — no visual change here,
+// the hover-revealed overlay buttons already signal "this card is active."
 export default function FolderSlot({
   folder,
   activeReference,
@@ -53,6 +58,11 @@ export default function FolderSlot({
   onPhotoDragStart,
   onPhotoDrop,
   isDropTarget,
+  onMouseEnter,
+  onMouseLeave,
+  tourActive,
+  onTourAdvance,
+  onTourSkip,
 }) {
   const isEmpty = !activeReference;
 
@@ -65,7 +75,7 @@ export default function FolderSlot({
         : "border-border";
 
   return (
-    <div className="group relative" data-folder-card>
+    <div className="group relative" data-folder-card onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
       <div
         ref={cardRef}
         onPointerDown={isRearranging ? onDragPointerDown : undefined}
@@ -138,26 +148,30 @@ export default function FolderSlot({
             </button>
 
             {/* Lock toggle */}
-            <button
-              onClick={onToggleLock}
-              title={locked ? "Unlock (Shuffle will re-roll this)" : "Lock (Shuffle will skip this)"}
-              aria-label={locked ? "Unlock this reference" : "Lock this reference"}
-              className={`absolute left-2 top-2 flex h-9 w-9 items-center justify-center rounded-full text-sm shadow-md transition-colors ${
-                locked
-                  ? "bg-accent-primary text-accent-primary-ink"
-                  : "bg-black/40 text-white opacity-0 backdrop-blur-sm group-hover:opacity-100 focus-visible:opacity-100"
-              }`}
-            >
-              {locked ? (
-                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                </svg>
-              ) : (
-                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
-                </svg>
-              )}
-            </button>
+            <div className="absolute left-2 top-2">
+              <button
+                onClick={onToggleLock}
+                title={locked ? "Unlock (Shuffle will re-roll this)" : "Lock (Shuffle will skip this)"}
+                aria-label={locked ? "Unlock this reference" : "Lock this reference"}
+                className={`flex h-9 w-9 items-center justify-center rounded-full text-sm shadow-md transition-colors ${
+                  locked
+                    ? "bg-accent-primary text-accent-primary-ink"
+                    : tourActive
+                      ? "bg-black/40 text-white backdrop-blur-sm"
+                      : "bg-black/40 text-white opacity-0 backdrop-blur-sm group-hover:opacity-100 focus-visible:opacity-100"
+                }`}
+              >
+                {locked ? (
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                ) : (
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+                  </svg>
+                )}
+              </button>
+            </div>
 
             {/* Add more (upload) */}
             <button
@@ -202,6 +216,20 @@ export default function FolderSlot({
           </button>
         )}
       </div>
+
+      {/* Anchored at the outer (non-`overflow-hidden`) wrapper, not inside
+          the image card above — the card clips its own contents to its
+          rounded corners, which would clip this callout's panel too.
+          Positioned to line up with the lock button's own top-left spot. */}
+      {tourActive && (
+        <div className="absolute left-2 top-2">
+          <TourCallout
+            message="Like what you see? Lock it — Shuffle will leave this one alone."
+            onAdvance={onTourAdvance}
+            onSkip={onTourSkip}
+          />
+        </div>
+      )}
 
       <div className="mt-2 px-0.5">
         {!isRearranging && !isFocusLocked ? (

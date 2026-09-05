@@ -3,6 +3,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import Header from "./components/Header.jsx";
 import NewDrawingModal from "./components/NewDrawingModal.jsx";
 import FinishModal from "./components/FinishModal.jsx";
+import OnboardingModal from "./components/OnboardingModal.jsx";
 import ReferenceBoard from "./components/board/ReferenceBoard.jsx";
 import ReferenceLibrary from "./components/library/ReferenceLibrary.jsx";
 import Button from "./components/ui/Button.jsx";
@@ -33,6 +34,35 @@ export default function App() {
     () => db.sessions.orderBy("id").reverse().toArray(),
     [],
   );
+
+  // First-time-user welcome modal — gated on its own db.settings flag so
+  // it shows exactly once, ever, the first time the hub renders. A brand
+  // new profile has no row for this key at all, and Dexie's `.get()`
+  // resolves to `undefined` both while the query is still loading *and*
+  // when the key genuinely doesn't exist — those two cases are otherwise
+  // indistinguishable, so "still loading" uses its own sentinel (the
+  // useLiveQuery third argument) rather than `undefined`, or this would
+  // never show at all for a first-time user. The board's own first-time
+  // callouts (Shuffle/Lock/Focus Lock) are a separate flag entirely — see
+  // ReferenceBoard.jsx's hasSeenBoardTour — since someone whose first
+  // drawing is a blank canvas should still see this, and the board tour
+  // should wait for a populated board instead of never firing.
+  const welcomeSetting = useLiveQuery(() => db.settings.get("hasSeenWelcome"), [], "loading");
+  const showWelcome = viewMode === "hub" && welcomeSetting !== "loading" && !welcomeSetting?.value;
+
+  const dismissWelcome = async () => {
+    await db.settings.put({ key: "hasSeenWelcome", value: true });
+  };
+
+  // "Replay welcome tour" (Header's Profile menu) resets both onboarding
+  // flags and jumps to the hub so the welcome modal has somewhere to show
+  // — the board tour then naturally re-triggers the next time a populated
+  // board is opened, same as a genuinely first-time user.
+  const handleReplayTour = async () => {
+    await db.settings.put({ key: "hasSeenWelcome", value: false });
+    await db.settings.put({ key: "hasSeenBoardTour", value: false });
+    setViewMode("hub");
+  };
 
   // Gallery Vault search/sort/date-filter — derived, never mutates
   // savedSessions itself (the header count and "no sessions at all" empty
@@ -112,6 +142,17 @@ export default function App() {
     setBoardOrder([]);
   }, []);
 
+  // A folder created on the board (batch-add, or a new name typed into
+  // NewDrawingModal) starts out a "draft" — not yet confirmed real, so the
+  // board's detach action can quietly clean it up if it's left empty and
+  // unused. Actually saving the session it's part of confirms it, the same
+  // as a folder added directly in Add References already is — from then on
+  // it's protected like any other folder, no exceptions for Form/Pose/etc.
+  // Never downgrades a folder that's already confirmed.
+  const confirmBoardFolders = async (slots) => {
+    await Promise.all(slots.map(({ folderId }) => db.folders.update(folderId, { isDraft: false })));
+  };
+
   // Replaces the old template-driven setup: the folders to attach are
   // whatever the user explicitly picked in NewDrawingModal, not implied by
   // a named theme. An empty `folderIds` array naturally produces an empty
@@ -137,7 +178,6 @@ export default function App() {
     }
     setBoardSlots(slots);
     setCanvasTitle(title);
-    await db.settings.put({ key: "lastNewDrawingFolderIds", value: folderIds });
 
     setIsNewDrawingModalOpen(false);
     setViewMode("workspace");
@@ -194,6 +234,7 @@ export default function App() {
     if (session.image?.startsWith("blob:")) {
       revokeObjectUrl(session.image);
     }
+    await confirmBoardFolders(boardSlots);
 
     setIsFinishModalOpen(false);
     setCurrentSession(null);
@@ -240,6 +281,7 @@ export default function App() {
       });
       setCurrentSession({ ...sessionPayload, id: newId });
     }
+    await confirmBoardFolders(boardSlots);
 
     setViewMode("hub");
     resetCanvasState();
@@ -325,6 +367,7 @@ export default function App() {
           onLogoClick={handleLogoClick}
           onStartDrawing={openNewDrawingModal}
           onFinishDrawing={() => setIsFinishModalOpen(true)}
+          onReplayTour={handleReplayTour}
         />
       )}
 
@@ -542,6 +585,12 @@ export default function App() {
           />
         </div>
       )}
+
+      {/* Onboarding temporarily disabled — see ReferenceBoard.jsx's tour-start
+          effect and Header.jsx's "Replay welcome tour" for the other two
+          pieces of this same feature, also commented out.
+      {showWelcome && <OnboardingModal onDismiss={dismissWelcome} />}
+      */}
 
       {/* New Drawing Setup Modal */}
       {isNewDrawingModalOpen && (

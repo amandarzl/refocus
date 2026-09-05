@@ -38,8 +38,11 @@ function formatBytes(bytes) {
 // active slot per folder.
 export default function FolderList({
   folders,
+  hasAnyFolders = true,
   counts,
   stats,
+  searchQuery = "",
+  onSearchQueryChange,
   onOpenFolder,
   onAddFolder,
   onDeleteFolder,
@@ -63,8 +66,29 @@ export default function FolderList({
         </p>
       )}
 
+      {hasAnyFolders && (
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => onSearchQueryChange?.(e.target.value)}
+          placeholder="Search folders or tags…"
+          className="mt-4 w-full max-w-sm rounded-control border border-border bg-surface-canvas px-3 py-2 text-sm text-ink-primary placeholder:text-ink-muted outline-none transition-colors focus:border-accent-primary"
+        />
+      )}
+
       <div className="mt-6 grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4">
-        {folders.map((folder) => {
+        {searchQuery.trim() && folders.length === 0 && hasAnyFolders ? (
+          <div className="col-span-full rounded-panel border border-dashed border-border p-8 text-center text-sm text-ink-secondary">
+            <p>No folders match "{searchQuery.trim()}".</p>
+            <button
+              onClick={() => onSearchQueryChange?.("")}
+              className="mt-2 text-xs font-semibold text-accent-primary underline"
+            >
+              Clear search
+            </button>
+          </div>
+        ) : (
+        folders.map((folder) => {
           const color = folder.color || defaultFolderColor(folder.id);
           const count = counts[folder.id] || 0;
           return (
@@ -104,7 +128,7 @@ export default function FolderList({
                   />
                 </span>
 
-                <span className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider opacity-70">
+                <span className="flex items-center justify-between text-[9px] font-semibold uppercase tracking-wider opacity-70">
                   <span>
                     {count} photo{count === 1 ? "" : "s"}
                   </span>
@@ -146,7 +170,8 @@ export default function FolderList({
               </button>
             </div>
           );
-        })}
+        })
+        )}
         <AddFolderControl onCreateFolder={onAddFolder} tileSize="folder" />
       </div>
     </div>

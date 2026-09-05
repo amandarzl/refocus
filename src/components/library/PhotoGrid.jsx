@@ -1,9 +1,9 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import TagEditor, { normalizeTag } from "../board/TagEditor.jsx";
 import ConfirmDialog from "../ConfirmDialog.jsx";
 import Button from "../ui/Button.jsx";
 import EmptyTile from "../ui/EmptyTile.jsx";
-import { filesToReferences } from "../../utils/imageProcessor.js";
+import { filesToReferences, getImageFilesFromClipboard } from "../../utils/imageProcessor.js";
 
 // The folder's full archive — every photo, no cap. Unlike the Reference
 // Board's single active-slot-per-folder view, this is a plain library
@@ -13,6 +13,7 @@ export default function PhotoGrid({
   folder,
   photos,
   allFolders = [],
+  isUploadModalOpen = false,
   onBack,
   onUpload,
   onAddReferences,
@@ -92,6 +93,27 @@ export default function PhotoGrid({
       setIsBusy(false);
     }
   };
+
+  // Ctrl+V anywhere on this folder's page adds straight to it, same
+  // pipeline as the drag-and-drop above — no need to open "Add more"
+  // first. Skipped while that modal is already open (it owns paste
+  // itself, see FolderUploadModal.jsx) so a paste never lands twice.
+  useEffect(() => {
+    if (isUploadModalOpen || !onAddReferences) return;
+    const handleWindowPaste = async (e) => {
+      const imageFiles = getImageFilesFromClipboard(e.clipboardData);
+      if (imageFiles.length === 0) return;
+      setIsBusy(true);
+      try {
+        const refs = await filesToReferences(imageFiles, folder.id);
+        if (refs.length > 0) await onAddReferences(refs);
+      } finally {
+        setIsBusy(false);
+      }
+    };
+    window.addEventListener("paste", handleWindowPaste);
+    return () => window.removeEventListener("paste", handleWindowPaste);
+  }, [isUploadModalOpen, onAddReferences, folder.id]);
 
   const allTags = useMemo(() => {
     const set = new Set();
@@ -293,7 +315,7 @@ export default function PhotoGrid({
       {confirmingBulkDelete && (
         <ConfirmDialog
           title={`Delete ${selectedIds.size} photo${selectedIds.size === 1 ? "" : "s"}?`}
-          message="This can't be undone."
+          message="You'll have a few seconds to undo right after."
           confirmLabel="Delete"
           onConfirm={confirmBulkDelete}
           onCancel={() => setConfirmingBulkDelete(false)}

@@ -1,11 +1,8 @@
 import { useMemo, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, DEFAULT_FOLDER_NAMES } from "../db.js";
-import { defaultFolderColor } from "./library/FolderList.jsx";
 import Modal from "./ui/Modal.jsx";
 import Button from "./ui/Button.jsx";
-
-const LAST_SELECTION_KEY = "lastNewDrawingFolderIds";
 
 // Replaces the old "pick a template framework" step. A template was really
 // just a fixed, hardcoded folder set auto-attached to a new board — but the
@@ -15,9 +12,14 @@ const LAST_SELECTION_KEY = "lastNewDrawingFolderIds";
 // folders (if any) to start the board with. Selecting none reproduces the
 // old "Blank Canvas" option with no special case.
 export default function NewDrawingModal({ onClose, onStartDrawing }) {
-  const folders = useLiveQuery(() => db.folders.orderBy("order").toArray(), []) || [];
+  const foldersRaw = useLiveQuery(() => db.folders.orderBy("order").toArray(), []) || [];
+  // Same rule as the Add References archive: a folder created on some
+  // other, still-unsaved board session is a draft, not yet "confirmed
+  // real" (see App.jsx's confirmBoardFolders) — this picker should only
+  // ever offer what's actually in your archive, live, same as everywhere
+  // else that lists folders.
+  const folders = foldersRaw.filter((f) => !f.isDraft);
   const allRefs = useLiveQuery(() => db.references.toArray(), []) || [];
-  const lastSelection = useLiveQuery(() => db.settings.get(LAST_SELECTION_KEY), []);
 
   const counts = useMemo(() => {
     const c = {};
@@ -26,43 +28,90 @@ export default function NewDrawingModal({ onClose, onStartDrawing }) {
   }, [allRefs]);
 
   const [title, setTitle] = useState("Untitled Canvas");
-  const [selectedIds, setSelectedIds] = useState(null); // null until the remembered selection resolves
+  // Starts empty on purpose, every time — no auto-seeding from last
+  // time's picks. Pre-checking the same folders every session made it
+  // too easy to click "Start Drawing" on autopilot, which cuts against
+  // the whole point of this modal: picking folders deliberately each time.
+  const [selectedIds, setSelectedIds] = useState([]);
+  // Names picked (via a suggestion chip or the "+ New folder" field) that
+  // don't exist as real folders yet. Purely local — nothing is written to
+  // the database until "Start Drawing" actually goes through, so closing
+  // this modal any other way leaves the archive untouched.
+  const [pendingNames, setPendingNames] = useState([]);
   const [newFolderName, setNewFolderName] = useState("");
 
-  // Seed the checklist from whatever was picked last time, once both the
-  // setting and the current folder list have loaded — and only once, so
-  // toggling checkboxes afterward doesn't get stomped by a stale re-run.
-  const idsToUse =
-    selectedIds ??
-    (lastSelection !== undefined && folders.length >= 0
-      ? (lastSelection?.value || []).filter((id) => folders.some((f) => f.id === id))
-      : null);
-
-  const selected = new Set(idsToUse || []);
+  const selected = new Set(selectedIds);
 
   const toggleFolder = (id) => {
-    const base = new Set(idsToUse || []);
+    const base = new Set(selectedIds);
     if (base.has(id)) base.delete(id);
     else base.add(id);
     setSelectedIds([...base]);
   };
 
-  const addFolder = async (name) => {
-    const trimmed = name.trim();
-    if (!trimmed) return;
-    const newId = await db.folders.add({ name: trimmed, order: folders.length, createdAt: Date.now() });
-    setSelectedIds([...(idsToUse || []), newId]);
+
+  // Adds `name` to this new drawing's picks without touching the database —
+  // an existing folder just gets checked; a brand-new name is only staged
+  // here and becomes a real folder if/when "Start Drawing" is clicked (see
+  // handleStart). Reused by both the suggestion chips and the custom
+  // "+ New folder" field so they behave identically.
+  const pickByName = (name) => {
+    const existing = folders.find((f) => (f.name || "").toLowerCase() === name.toLowerCase());
+    if (existing) {
+      if (!selected.has(existing.id)) toggleFolder(existing.id);
+      return;
+    }
+    setPendingNames((prev) =>
+      prev.some((n) => n.toLowerCase() === name.toLowerCase()) ? prev : [...prev, name],
+    );
   };
 
-  const submitNewFolder = async () => {
-    await addFolder(newFolderName);
+  const removePending = (name) => {
+    setPendingNames((prev) => prev.filter((n) => n !== name));
+  };
+
+  const submitNewFolder = () => {
+    const trimmed = newFolderName.trim();
+    if (!trimmed) return;
+    pickByName(trimmed);
     setNewFolderName("");
   };
 
-  const handleStart = () => {
+  // Suggestion chips only offer names you don't already have a folder for —
+  // once a real "Form" exists, it's just a checkbox in the list below (no
+  // need for a quick-create chip too); a not-yet-real, pending name is
+  // likewise dropped from suggestions the moment you've picked it. The row
+  // shrinks one chip at a time as you go rather than vanishing outright
+  // after your first pick, so you can keep picking without hunting for
+  // another control.
+  const suggestionNames = DEFAULT_FOLDER_NAMES.filter((name) => {
+    const alreadyExists = folders.some((f) => (f.name || "").toLowerCase() === name.toLowerCase());
+    if (alreadyExists) return false;
+    return !pendingNames.some((n) => n.toLowerCase() === name.toLowerCase());
+  });
+
+  const hasAnyEntries = folders.length > 0 || pendingNames.length > 0;
+
+  const handleStart = async () => {
+    // Pending names only become real folders now, on actual confirmation —
+    // never just from checking a box while browsing this modal. They start
+    // as drafts (isDraft: true) — not yet "confirmed real" the way a folder
+    // added in Add References already is — until this drawing is actually
+    // saved (see App.jsx's confirmBoardFolders), so an unused one can be
+    // cleaned up automatically if you detach it without ever saving.
+    const newIds = [];
+    for (const name of pendingNames) {
+      const newId = await db.folders.add({
+        name,
+        order: folders.length + newIds.length,
+        createdAt: Date.now(),
+        isDraft: true,
+      });
+      newIds.push(newId);
+    }
     onStartDrawing({
       title: title.trim() || "Untitled Canvas",
-      folderIds: [...selected],
+      folderIds: [...selected, ...newIds],
     });
   };
 
@@ -101,20 +150,12 @@ export default function NewDrawingModal({ onClose, onStartDrawing }) {
 
         <label className="mt-5 block text-xs font-bold uppercase tracking-wider text-ink-muted">Folders</label>
 
-        {folders.length === 0 ? (
+        {/* Your own folders come first — seeing what you already have
+            before being offered suggestions makes it clear those are your
+            real, available folders, not more options mixed in with them. */}
+        {!hasAnyEntries ? (
           <div className="mt-2 rounded-panel border border-dashed border-border p-4 text-sm text-ink-secondary">
-            <p>You don't have any folders yet — start with a few common ones, or add your own below.</p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {DEFAULT_FOLDER_NAMES.map((name) => (
-                <button
-                  key={name}
-                  onClick={() => addFolder(name)}
-                  className="rounded-full border border-border bg-surface-raised px-3 py-1 text-xs font-semibold text-ink-secondary transition-colors hover:border-accent-primary hover:text-accent-primary"
-                >
-                  + {name}
-                </button>
-              ))}
-            </div>
+            <p>You don't have any folders yet — pick a suggestion below, or add your own.</p>
           </div>
         ) : (
           <div className="mt-2 max-h-56 overflow-y-auto rounded-panel border border-border">
@@ -132,11 +173,6 @@ export default function NewDrawingModal({ onClose, onStartDrawing }) {
                     onChange={() => toggleFolder(folder.id)}
                     className="h-4 w-4 cursor-pointer accent-accent-primary"
                   />
-                  <span
-                    className="h-3 w-3 flex-shrink-0 rounded-sm"
-                    style={{ backgroundColor: folder.color || defaultFolderColor(folder.id) }}
-                    aria-hidden="true"
-                  />
                   <span className="flex-1 truncate font-semibold text-ink-primary">{folder.name}</span>
                   <span className="flex-shrink-0 text-xs text-ink-muted">
                     {count} photo{count === 1 ? "" : "s"}
@@ -144,6 +180,35 @@ export default function NewDrawingModal({ onClose, onStartDrawing }) {
                 </label>
               );
             })}
+            {pendingNames.map((name, i) => (
+              <label
+                key={`pending-${name}`}
+                className="flex cursor-pointer items-center gap-3 border-b border-border bg-surface-sunken/60 px-3 py-2.5 text-sm last:border-b-0 hover:bg-surface-sunken"
+              >
+                <input
+                  type="checkbox"
+                  checked
+                  onChange={() => removePending(name)}
+                  className="h-4 w-4 cursor-pointer accent-accent-primary"
+                />
+                <span className="flex-1 truncate font-semibold text-ink-primary">{name}</span>
+                <span className="flex-shrink-0 text-xs text-ink-muted">new</span>
+              </label>
+            ))}
+          </div>
+        )}
+
+        {suggestionNames.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {suggestionNames.map((name) => (
+              <button
+                key={name}
+                onClick={() => pickByName(name)}
+                className="rounded-full border border-border bg-surface-raised px-3 py-1 text-xs font-semibold text-ink-secondary transition-colors hover:border-accent-primary hover:text-accent-primary"
+              >
+                + {name}
+              </button>
+            ))}
           </div>
         )}
 

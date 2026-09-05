@@ -6,4 +6,5 @@ export const Z = {
   dropdown: 50,
   modal: 70,
   confirmDialog: 80,
+  toast: 90,
 };

@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { filesToReferences } from "../../utils/imageProcessor";
+import { filesToReferences, getImageFilesFromClipboard } from "../../utils/imageProcessor";
 import { normalizeTag } from "./TagEditor";
 import { Z } from "../ui/zIndex.js";
 
@@ -148,13 +148,7 @@ export default function FolderUploadModal({
   };
 
   const handlePaste = async (e) => {
-    const items = e.clipboardData?.items;
-    if (!items) return;
-
-    const imageFiles = Array.from(items)
-      .filter((item) => item.type && item.type.startsWith("image/"))
-      .map((item) => item.getAsFile())
-      .filter(Boolean);
+    const imageFiles = getImageFilesFromClipboard(e.clipboardData);
     if (imageFiles.length > 0) {
       await handleFiles(imageFiles);
       return;

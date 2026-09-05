@@ -5,6 +5,7 @@ import FolderList from "./FolderList.jsx";
 import PhotoGrid from "./PhotoGrid.jsx";
 import FolderUploadModal from "../board/FolderUploadModal.jsx";
 import ConfirmDialog from "../ConfirmDialog.jsx";
+import Toast from "../ui/Toast.jsx";
 import { setActiveReference } from "../board/constants.js";
 
 // Standalone "Add References" destination: browse/manage the same
@@ -14,12 +15,90 @@ import { setActiveReference } from "../board/constants.js";
 // ReferenceBoard — only used here to make an on-the-board folder's newly
 // uploaded photo its active picture when you upload to it from this page.
 export default function ReferenceLibrary({ boardSlots, onSlotsChange }) {
-  const folders = useLiveQuery(() => db.folders.orderBy("order").toArray(), []) || [];
-  const allRefs = useLiveQuery(() => db.references.toArray(), []) || [];
+  const foldersRaw = useLiveQuery(() => db.folders.orderBy("order").toArray(), []) || [];
+  // A folder created on the board stays a draft — not yet "confirmed real"
+  // (see App.jsx's confirmBoardFolders) — until the session it's part of is
+  // actually saved. Until then it's board-only: it doesn't belong in this
+  // archive yet, the same way an idea you haven't committed to shouldn't
+  // clutter your library. It appears here the moment it's confirmed.
+  const foldersConfirmed = foldersRaw.filter((f) => !f.isDraft);
+  const allRefsRaw = useLiveQuery(() => db.references.toArray(), []) || [];
 
   const [openFolderId, setOpenFolderId] = useState(null);
   const [uploadFolderId, setUploadFolderId] = useState(null);
   const [folderToDelete, setFolderToDelete] = useState(null);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // A delete (folder, single photo, or bulk) is staged here rather than
+  // run immediately: the item disappears from the archive right away (see
+  // the folders/allRefs filtering below), but the real Dexie delete only
+  // happens once `commitDelete` runs — either when the toast's timer
+  // fires, or right away if you delete something else first. Undo just
+  // cancels the timer; there's nothing to restore because nothing was
+  // actually deleted yet.
+  const [pendingDelete, setPendingDelete] = useState(null);
+
+  const commitDelete = async (pending) => {
+    if (!pending) return;
+    if (pending.type === "folder") {
+      await db.references.where("folderId").equals(pending.folderId).delete();
+      await db.folders.delete(pending.folderId);
+      if (openFolderId === pending.folderId) setOpenFolderId(null);
+    } else {
+      // "photo" and "bulk" are both just a set of reference ids to drop.
+      await db.references.bulkDelete(pending.ids);
+    }
+  };
+
+  const scheduleDelete = (pending) => {
+    // Only one pending delete at a time — a second delete while a toast is
+    // still showing commits the first immediately rather than leaving it
+    // ambiguous which one "Undo" would apply to.
+    if (pendingDelete) {
+      clearTimeout(pendingDelete.timerId);
+      commitDelete(pendingDelete);
+    }
+    const timerId = setTimeout(() => {
+      commitDelete(pending);
+      setPendingDelete(null);
+    }, 5000);
+    setPendingDelete({ ...pending, timerId });
+  };
+
+  const undoDelete = () => {
+    if (!pendingDelete) return;
+    clearTimeout(pendingDelete.timerId);
+    setPendingDelete(null);
+  };
+
+  // Everywhere folders/refs are read from below already looks like the
+  // pending delete happened — the archive shouldn't show something that's
+  // one un-clicked "Undo" away from being gone anyway.
+  const folders = foldersConfirmed.filter(
+    (f) => !(pendingDelete?.type === "folder" && pendingDelete.folderId === f.id),
+  );
+  const allRefs = allRefsRaw.filter((r) => {
+    if (!pendingDelete) return true;
+    if (pendingDelete.type === "folder") return r.folderId !== pendingDelete.folderId;
+    return !pendingDelete.ids.includes(r.id);
+  });
+
+  // Matches on folder name OR any tag on a photo inside that folder, so
+  // typing finds the right folder whether you remember its name or just a
+  // tag you gave things in it. Header stats/counts below stay keyed off the
+  // full, unfiltered folders/allRefs — only the grid itself narrows.
+  const visibleFolders = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return folders;
+    const matchingTagFolderIds = new Set(
+      allRefs
+        .filter((r) => (r.tags || []).some((t) => t.toLowerCase().includes(q)))
+        .map((r) => r.folderId),
+    );
+    return folders.filter(
+      (f) => f.name.toLowerCase().includes(q) || matchingTagFolderIds.has(f.id),
+    );
+  }, [folders, allRefs, searchQuery]);
 
   const counts = useMemo(() => {
     const c = {};
@@ -60,13 +139,15 @@ export default function ReferenceLibrary({ boardSlots, onSlotsChange }) {
     await db.folders.update(id, { color });
   };
 
-  const confirmDeleteFolder = async () => {
+  const confirmDeleteFolder = () => {
     const folder = folderToDelete;
     setFolderToDelete(null);
     if (!folder) return;
-    await db.references.where("folderId").equals(folder.id).delete();
-    await db.folders.delete(folder.id);
-    if (openFolderId === folder.id) setOpenFolderId(null);
+    scheduleDelete({
+      type: "folder",
+      folderId: folder.id,
+      message: `Deleted "${folder.name}" and its photos`,
+    });
   };
 
   const handleAddReferences = async (refs) => {
@@ -83,15 +164,15 @@ export default function ReferenceLibrary({ boardSlots, onSlotsChange }) {
     if (updated !== (boardSlots || [])) onSlotsChange(updated);
   };
 
-  const handleDeletePhoto = async (photo) => {
-    await db.references.delete(photo.id);
+  const handleDeletePhoto = (photo) => {
+    scheduleDelete({ type: "photo", ids: [photo.id], message: "Photo deleted" });
   };
 
   // Bulk actions — same one-off "fix several at once" scope as the single-
   // photo handlers above; no board-slot syncing here either (matches
   // handleDeletePhoto, which already doesn't touch boardSlots).
-  const handleBulkDelete = async (ids) => {
-    await db.references.bulkDelete(ids);
+  const handleBulkDelete = (ids) => {
+    scheduleDelete({ type: "bulk", ids, message: `${ids.length} photos deleted` });
   };
 
   const handleBulkMove = async (ids, toFolderId) => {
@@ -124,6 +205,7 @@ export default function ReferenceLibrary({ boardSlots, onSlotsChange }) {
           folder={openFolder}
           photos={photosInOpenFolder}
           allFolders={folders}
+          isUploadModalOpen={uploadFolderId != null}
           onBack={() => setOpenFolderId(null)}
           onUpload={() => setUploadFolderId(openFolder.id)}
           onAddReferences={handleAddReferences}
@@ -136,9 +218,12 @@ export default function ReferenceLibrary({ boardSlots, onSlotsChange }) {
         />
       ) : (
         <FolderList
-          folders={folders}
+          folders={visibleFolders}
+          hasAnyFolders={folders.length > 0}
           counts={counts}
           stats={archiveStats}
+          searchQuery={searchQuery}
+          onSearchQueryChange={setSearchQuery}
           onOpenFolder={(f) => setOpenFolderId(f.id)}
           onAddFolder={handleAddFolder}
           onDeleteFolder={setFolderToDelete}
@@ -158,10 +243,18 @@ export default function ReferenceLibrary({ boardSlots, onSlotsChange }) {
       {folderToDelete && (
         <ConfirmDialog
           title={`Remove "${folderToDelete.name}"?`}
-          message="This deletes the folder and every photo inside it. This can't be undone."
+          message="This deletes the folder and every photo inside it. You'll have a few seconds to undo right after."
           confirmLabel="Delete"
           onConfirm={confirmDeleteFolder}
           onCancel={() => setFolderToDelete(null)}
+        />
+      )}
+
+      {pendingDelete && (
+        <Toast
+          message={pendingDelete.message}
+          onUndo={undoDelete}
+          onDismiss={() => setPendingDelete((current) => (current === pendingDelete ? null : current))}
         />
       )}
     </div>

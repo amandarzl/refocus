@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { VitePWA } from "vite-plugin-pwa";
 import { fetchImageFromUrl } from "./src/server/imageProxy.js";
 
 // Mounts the Pinterest/URL image proxy directly on the Vite dev server, so
@@ -56,5 +57,58 @@ function imageProxyPlugin() {
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), imageProxyPlugin()],
+  plugins: [
+    react(),
+    imageProxyPlugin(),
+    // Everything the app needs is already client-side (Dexie/IndexedDB) —
+    // this is what turns that into an installable, fully offline app: a
+    // manifest for the home-screen icon + standalone window, and a
+    // Workbox-generated service worker that precaches the build output.
+    VitePWA({
+      registerType: "autoUpdate",
+      manifest: {
+        name: "ReFocus",
+        short_name: "ReFocus",
+        description: "Reference-image board for artists, built to prevent burnout.",
+        display: "standalone",
+        start_url: "/",
+        scope: "/",
+        // The app's dark-mode --color-surface-canvas (index.html's default
+        // data-theme) — see src/index.css.
+        theme_color: "#1A1A1A",
+        background_color: "#1A1A1A",
+        icons: [
+          { src: "icons/icon-192.png", sizes: "192x192", type: "image/png" },
+          { src: "icons/icon-512.png", sizes: "512x512", type: "image/png" },
+          {
+            src: "icons/icon-512-maskable.png",
+            sizes: "512x512",
+            type: "image/png",
+            purpose: "maskable",
+          },
+        ],
+      },
+      workbox: {
+        // The one external dependency the app has (same-origin build
+        // output is precached by Workbox automatically) — cached so the
+        // fonts still render after the first load, offline.
+        runtimeCaching: [
+          {
+            urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
+            handler: "CacheFirst",
+            options: { cacheName: "google-fonts-stylesheets" },
+          },
+          {
+            urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
+            handler: "CacheFirst",
+            options: {
+              cacheName: "google-fonts-webfonts",
+              expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 * 365 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+        ],
+      },
+    }),
+  ],
 });
